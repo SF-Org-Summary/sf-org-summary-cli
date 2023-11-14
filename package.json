@@ -36,7 +36,7 @@
     "sf-plugin",
     "sf"
   ],
-  "license": "BSD-3-Clause",
+  "license": "AGPL-3.0",
   "main": "lib/index.js",
   "oclif": {
     "commands": "./lib/commands",
