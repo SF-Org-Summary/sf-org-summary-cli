@@ -46,7 +46,6 @@ const dataPoints = [
 ];
 
 export function summarizeOrg(orgAlias?: string): summary {
-
     // PREP
     const dataDirectory = './orgdata';
     if (!fs.existsSync(dataDirectory)) {
@@ -54,16 +53,25 @@ export function summarizeOrg(orgAlias?: string): summary {
     }
     let initialMessage;
     if (orgAlias) {
-        initialMessage = `Running queries on the Org with the Alias "${orgAlias}"`
+        initialMessage = `Running queries on the Org with the Alias "${orgAlias}"`;
     } else {
-        initialMessage = 'No Org Alias provided, queries will be running on the set default Org'
+        initialMessage = 'No Org Alias provided, queries will be running on the set default Org';
     }
+
     console.log(initialMessage);
-    // Run Apex Tests
+
+    const orgIdCommand = `sfdx force:org:display --target-org "${orgAlias}" --json`;
+    const orgIdOutput = execSync(orgIdCommand, { encoding: 'utf8' });
+    const orgId = JSON.parse(orgIdOutput).result.id;
+    const instanceURL = JSON.parse(orgIdOutput).result.instanceUrl;
+    const username = JSON.parse(orgIdOutput).result.username;
+
     const testResultsCommand = `sfdx force:apex:test:run --target-org "${orgAlias}" --test-level RunLocalTests --code-coverage --result-format json > ./orgdata/testResults.json`;
     execSync(testResultsCommand, { encoding: 'utf8' });
+
     const testRunId = extractTestRunId('./orgdata/testResults.json');
     console.log('testRunId', testRunId);
+
     if (testRunId) {
         console.log(`Checking Status of Job "${testRunId}"...`);
         pollTestRunResult(testRunId, orgAlias)
@@ -74,6 +82,7 @@ export function summarizeOrg(orgAlias?: string): summary {
                             .then(orgWideApexCoverage => {
                                 const queryResults: Record<string, unknown[]> = {};
                                 const errors = [];
+
                                 for (const dataPoint of dataPoints) {
                                     try {
                                         const query = buildQuery(dataPoint);
@@ -90,15 +99,22 @@ export function summarizeOrg(orgAlias?: string): summary {
                                     ResultState = 'Failed';
                                     process.exitCode = 1;
                                 }
+
                                 const summary: summary = {
                                     SummaryDate: new Date().toISOString().replace(/T/, ' ').replace(/\..+/, ''),
                                     ResultState,
-                                    ...calculateSummaryStats(queryResults),
-                                    ApexTestOutcome: testResult?.outcome || 'N/A',
-                                    ApexTestRuntime: testResult?.runtime || 0,
-                                    ApexTestMethodsCompleted: testResult?.methodsCompleted || 0,
-                                    ApexTestMethodsFailed: testResult?.methodsFailed || 0,
-                                    ApexOrgWideCoverage: orgWideApexCoverage || 0,
+                                    OrgId: orgId,
+                                    Username: username,
+                                    OrgInstanceURL: instanceURL,
+                                    Components: calculateComponentSummary(queryResults),
+                                    TestResults: {
+                                        ApexTestOutcome: testResult?.outcome || 'N/A',
+                                        ApexTestDuration: testResult?.runtime.toString() || 'N/A',
+                                        ApexUnitTests: testResult?.methodsCompleted || 0,
+                                        ApexTestMethodsCompleted: testResult?.methodsCompleted || 0,
+                                        ApexTestMethodsFailed: testResult?.methodsFailed || 0,
+                                        ApexOrgWideCoverage: orgWideApexCoverage || 0
+                                    }
                                 };
 
                                 console.log('Summary:', summary);
@@ -118,8 +134,8 @@ export function summarizeOrg(orgAlias?: string): summary {
     }
 }
 
-function calculateSummaryStats(queryResults: Record<string, unknown[]>): Record<string, unknown> {
-    const summaryStats: Record<string, unknown> = {};
+function calculateComponentSummary(queryResults: Record<string, unknown[]>): Record<string, unknown> {
+    const componentSummary: Record<string, unknown> = {};
 
     for (const dataPoint in queryResults) {
         if (Object.prototype.hasOwnProperty.call(queryResults, dataPoint)) {
@@ -130,18 +146,19 @@ function calculateSummaryStats(queryResults: Record<string, unknown[]>): Record<
                 const lastRecord = results[0]; // Since we ordered by LastModifiedDate DESC, the first record has the latest modification
                 const lastModifiedDate = lastRecord.LastModifiedDate;
 
-                summaryStats[dataPoint] = {
-                    Total: resultLength,
+                componentSummary[dataPoint] = {
                     LastModifiedDate: lastModifiedDate,
+                    ResultLength: resultLength
                 };
             } else {
-                summaryStats[dataPoint] = { Total: 0 };
+                componentSummary[dataPoint] = { ResultLength: 0 };
             }
         }
     }
 
-    return summaryStats;
+    return componentSummary;
 }
+
 
 function buildQuery(dataPoint: string): string {
     return `SELECT CreatedBy.Name, CreatedDate, Id, LastModifiedBy.Name, LastModifiedDate FROM ${dataPoint} ORDER BY LastModifiedDate DESC`;
