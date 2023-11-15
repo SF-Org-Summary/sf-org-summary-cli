@@ -1,10 +1,42 @@
 export type summary = {
-    SummaryDate: string,
-    ResultState: string,
-    ApexClasses: Number,
-    ApexTriggers: Number,
-    AuraComponents: Number,
-    Flows: Number,
-    LWCComponents: Number,
-    StaticResources: Number
-  };
+  'AIApplication': { LastModifiedDate?: string; ResultLength: number };
+  'ApexClass': { LastModifiedDate?: string; ResultLength: number };
+  'ApexPage': { LastModifiedDate?: string; ResultLength: number };
+  'ApexTrigger': { LastModifiedDate?: string; ResultLength: number };
+  'AuraDefinitionBundle': { LastModifiedDate?: string; ResultLength: number };
+  'BrandingSet': { LastModifiedDate?: string; ResultLength: number };
+  'CleanDataService': { LastModifiedDate?: string; ResultLength: number };
+  'CustomApplication': { LastModifiedDate?: string; ResultLength: number };
+  'CustomField': { LastModifiedDate?: string; ResultLength: number };
+  'CustomHttpHeader': { LastModifiedDate?: string; ResultLength: number };
+  'CustomObject': { LastModifiedDate?: string; ResultLength: number };
+  'CustomTab': { LastModifiedDate?: string; ResultLength: number };
+  'EmbeddedServiceCustomComponent': { LastModifiedDate?: string; ResultLength: number };
+  'ExternalCredential': { LastModifiedDate?: string; ResultLength: number };
+  'ExternalDataSource': { LastModifiedDate?: string; ResultLength: number };
+  'FlowDefinition': { LastModifiedDate?: string; ResultLength: number };
+  'Group': { LastModifiedDate?: string; ResultLength: number };
+  'InboundNetworkConnection': { LastModifiedDate?: string; ResultLength: number };
+  'LightningComponentBundle': { LastModifiedDate?: string; ResultLength: number };
+  'OrgDomainLog': { LastModifiedDate?: string; ResultLength: number };
+  'OutboundNetworkConnection': { LastModifiedDate?: string; ResultLength: number };
+  'PermissionSet': { LastModifiedDate?: string; ResultLength: number };
+  'PermissionSetGroup': { LastModifiedDate?: string; ResultLength: number };
+  'PlatformEventChannel': { LastModifiedDate?: string; ResultLength: number };
+  'Profile': { LastModifiedDate?: string; ResultLength: number };
+  'QuickActionDefinition': { LastModifiedDate?: string; ResultLength: number };
+  'RecordType': { LastModifiedDate?: string; ResultLength: number };
+  'RemoteProxy': { LastModifiedDate?: string; ResultLength: number };
+  'ResultState': string;
+  'StaticResource': { LastModifiedDate?: string; ResultLength: number };
+  'SummaryDate': string;
+  'ApexTestDuration': string;
+  'ApexUnitTests': number;
+  'TransactionSecurityPolicy': { LastModifiedDate?: string; ResultLength: number };
+  'ValidationRule': { LastModifiedDate?: string; ResultLength: number };
+  'ApexTestOutcome': string;
+  'ApexTestRuntime': number;
+  'ApexTestMethodsCompleted': number;
+  'ApexTestMethodsFailed': number;
+  'ApexOrgWideCoverage': number;
+};
