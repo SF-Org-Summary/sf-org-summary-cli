@@ -1,7 +1,7 @@
 import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
 import { summarizeOrg } from '../../module/summarizeOrg';
-import {summary} from "../../models/summary"
+import { summary } from '../../models/summary'
 
 Messages.importMessagesDirectory(__dirname);
 const messages = Messages.loadMessages('sf-org-summary', 'summarize');
@@ -13,7 +13,7 @@ export default class Summarize extends SfCommand<summary> {
   protected static requiresUsername = false;
   protected static supportsDevhubUsername = false;
   protected static supportsUsername = true;
-  
+
   public static readonly flags = {
     targetusername: Flags.string({
       summary: messages.getMessage('flags.name.summary'),
@@ -28,7 +28,7 @@ export default class Summarize extends SfCommand<summary> {
     if (flags.targetusername) {
       return summarizeOrg(flags.targetusername);
     } else {
-    return summarizeOrg();
+      return summarizeOrg();
     }
   }
 
