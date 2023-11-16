@@ -9,40 +9,55 @@ import { execSync } from 'child_process';
 import fs = require('fs');
 import parse = require('csv-parse/lib/sync');
 import { summary } from '../models/summary';
+import { GetFlowCoverage } from '../libs/GetFlowCoverage';
 
 const dataPoints = [
+    'Package2',
+    'RecommendationStrategy',
     'AIApplication',
     'ApexClass',
     'ApexPage',
+    'ApexExecutionOverlayAction',
     'ApexTrigger',
     'AuraDefinitionBundle',
+    'AutoResponseRule',
     'BrandingSet',
     'CleanDataService',
     'CustomApplication',
     'CustomField',
     'CustomHttpHeader',
+    'CspTrustedSite',
     'CustomObject',
     'CustomTab',
-    'EmbeddedServiceCustomComponent',
-    'ExternalCredential',
+    'EmailTemplate',
+    'NamedCredential',
     'ExternalDataSource',
     'FlowDefinition',
+    'HomePageLayout',
     'Group',
+    'GlobalValueSet',
     'InboundNetworkConnection',
     'LightningComponentBundle',
+    'Layout',
+    'LookupFilter',
     'OrgDomainLog',
     'OutboundNetworkConnection',
+    'PathAssistant',
     'PermissionSetGroup',
     'PermissionSet',
     'PlatformEventChannel',
     'Profile',
+    'PostTemplate',
     'QuickActionDefinition',
+    'FieldSet',
     'RecordType',
     'RemoteProxy',
     'RestrictionRule',
     'StaticResource',
+    'Scontrol',
     'TransactionSecurityPolicy',
-    'ValidationRule'
+    'ValidationRule',
+    'WebLink'
 ];
 
 export function summarizeOrg(orgAlias?: string): summary {
@@ -80,6 +95,9 @@ export function summarizeOrg(orgAlias?: string): summary {
                     .then(testResult => {
                         getOrgWideApexCoverage(orgAlias)
                             .then(orgWideApexCoverage => {
+                                // Get flow coverage details
+                                const flowCoverage = getFlowCoverage(orgAlias);
+
                                 const queryResults: Record<string, unknown[]> = {};
                                 const errors = [];
 
@@ -113,7 +131,8 @@ export function summarizeOrg(orgAlias?: string): summary {
                                         ApexUnitTests: testResult?.methodsCompleted || 0,
                                         ApexTestMethodsCompleted: testResult?.methodsCompleted || 0,
                                         ApexTestMethodsFailed: testResult?.methodsFailed || 0,
-                                        ApexOrgWideCoverage: orgWideApexCoverage || 0
+                                        ApexOrgWideCoverage: orgWideApexCoverage || 0,
+                                        FlowOrgWideCoverage: calculateFlowOrgWideCoverage(flowCoverage)
                                     }
                                 };
 
@@ -134,6 +153,31 @@ export function summarizeOrg(orgAlias?: string): summary {
     }
 }
 
+function calculateFlowOrgWideCoverage(flowCoverage: Record<string, number>[]): number {
+    if (flowCoverage.length === 0) {
+        return 0;
+    }
+
+    const totalCoverage = flowCoverage.reduce((sum, coverage) => sum + coverage, 0);
+    return totalCoverage / flowCoverage.length;
+}
+
+function getFlowCoverage(username: string): Record<string, number>[] {
+    const flowCoverage = [];
+    try {
+        const flowCoverageResults = new GetFlowCoverage().getFlowCoverage(username);
+
+        for (const record of flowCoverageResults.result.records) {
+            const coveragePercentage =
+                (record.NumElementsCovered / (record.NumElementsCovered + record.NumElementsNotCovered)) * 100;
+            flowCoverage.push(coveragePercentage);
+        }
+    } catch (error) {
+        console.error('Error getting flow coverage:', error.message);
+    }
+    return flowCoverage;
+}
+
 function calculateComponentSummary(queryResults: Record<string, unknown[]>): Record<string, unknown> {
     const componentSummary: Record<string, unknown> = {};
 
@@ -148,10 +192,10 @@ function calculateComponentSummary(queryResults: Record<string, unknown[]>): Rec
 
                 componentSummary[dataPoint] = {
                     LastModifiedDate: lastModifiedDate,
-                    ResultLength: resultLength
+                    Total: resultLength
                 };
             } else {
-                componentSummary[dataPoint] = { ResultLength: 0 };
+                componentSummary[dataPoint] = { Total: 0 };
             }
         }
     }
