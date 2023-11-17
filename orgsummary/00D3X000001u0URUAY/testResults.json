@@ -1,2 +1,0 @@
-Run "sf apex get test -i 7073X0000Fo3AjS -o liveoverview@halmanlabs.com" to retrieve test results
-Run with --synchronous or increase --wait timeout to wait for results.
