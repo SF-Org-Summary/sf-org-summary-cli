@@ -12,49 +12,59 @@ import { summary } from '../models/summary';
 import { GetFlowCoverage } from '../libs/GetFlowCoverage';
 
 const dataPoints = [
-    'Package2',
-    'RecommendationStrategy',
     'AIApplication',
     'ApexClass',
-    'ApexPage',
     'ApexExecutionOverlayAction',
+    'ApexPage',
     'ApexTrigger',
     'AuraDefinitionBundle',
     'AutoResponseRule',
+    'BusinessProcessDefinition',
     'BrandingSet',
     'CleanDataService',
+    'CleanRule',
     'CustomApplication',
     'CustomField',
     'CustomHttpHeader',
     'CspTrustedSite',
     'CustomObject',
     'CustomTab',
+    'DataIntegrationRecordPurchasePermission',
+    'DuplicateJobDefinition',
     'EmailTemplate',
-    'NamedCredential',
     'ExternalDataSource',
+    'FieldSet',
     'FlowDefinition',
-    'HomePageLayout',
-    'Group',
     'GlobalValueSet',
+    'Group',
+    'HomePageLayout',
     'InboundNetworkConnection',
     'LightningComponentBundle',
     'Layout',
     'LookupFilter',
+    'MatchingRule',
+    'MarketingAppExtension',
+    'NamedCredential',
+    'OpportunitySplitType',
     'OrgDomainLog',
     'OutboundNetworkConnection',
+    'Package2',
     'PathAssistant',
+    'PermissionSet',
     'PermissionSetGroup',
     'PermissionSet',
     'PlatformEventChannel',
-    'Profile',
     'PostTemplate',
+    'Profile',
     'QuickActionDefinition',
     'FieldSet',
     'RecordType',
+    'RecommendationStrategy',
     'RemoteProxy',
     'RestrictionRule',
-    'StaticResource',
+    'SchedulingRule',
     'Scontrol',
+    'StaticResource',
     'TransactionSecurityPolicy',
     'ValidationRule',
     'WebLink'
@@ -62,7 +72,7 @@ const dataPoints = [
 
 export function summarizeOrg(orgAlias?: string): summary {
     // PREP
-    const dataDirectory = './orgdata';
+    const dataDirectory = './orgsummary';
     if (!fs.existsSync(dataDirectory)) {
         fs.mkdirSync(dataDirectory);
     }
@@ -74,29 +84,36 @@ export function summarizeOrg(orgAlias?: string): summary {
     }
 
     console.log(initialMessage);
-
     const orgIdCommand = `sfdx force:org:display --target-org "${orgAlias}" --json`;
     const orgIdOutput = execSync(orgIdCommand, { encoding: 'utf8' });
     const orgId = JSON.parse(orgIdOutput).result.id;
     const instanceURL = JSON.parse(orgIdOutput).result.instanceUrl;
     const username = JSON.parse(orgIdOutput).result.username;
 
-    const testResultsCommand = `sfdx force:apex:test:run --target-org "${orgAlias}" --test-level RunLocalTests --code-coverage --result-format json > ./orgdata/testResults.json`;
+    // Create dynamic directory path based on org ID
+    const orgSummaryDirectory = `./orgsummary/${orgId}`;
+    if (!fs.existsSync(orgSummaryDirectory)) {
+        fs.mkdirSync(orgSummaryDirectory);
+    }
+
+    // RUN
+    const testResultsCommand = `sfdx force:apex:test:run --target-org "${orgAlias}" --test-level RunLocalTests --code-coverage --result-format json > ${orgSummaryDirectory}/testResults.json`;
     execSync(testResultsCommand, { encoding: 'utf8' });
-
-    const testRunId = extractTestRunId('./orgdata/testResults.json');
+    const testRunId = extractTestRunId(`${orgSummaryDirectory}/testResults.json`);
     console.log('testRunId', testRunId);
-
     if (testRunId) {
         console.log(`Checking Status of Job "${testRunId}"...`);
-        pollTestRunResult(testRunId, orgAlias)
+        pollTestRunResult(testRunId, orgSummaryDirectory, orgAlias)
             .then(() => {
-                getTestRunDetails(testRunId, orgAlias)
+                getTestRunDetails(testRunId, orgSummaryDirectory, orgAlias)
                     .then(testResult => {
-                        getOrgWideApexCoverage(orgAlias)
+                        getOrgWideApexCoverage(orgSummaryDirectory, orgAlias)
                             .then(orgWideApexCoverage => {
-                                // Get flow coverage details
                                 const flowCoverage = getFlowCoverage(orgAlias);
+
+                                // todo
+                                // const apexClasses = retrieveApexClasses(orgAlias);
+                                // const apexCodeLines = countCodeLines('./tempSFDXProject/force-app/main/default/classes');
 
                                 const queryResults: Record<string, unknown[]> = {};
                                 const errors = [];
@@ -104,17 +121,15 @@ export function summarizeOrg(orgAlias?: string): summary {
                                 for (const dataPoint of dataPoints) {
                                     try {
                                         const query = buildQuery(dataPoint);
-                                        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                                        const result = queryMetadata(query, `./orgdata/${dataPoint}.csv`, orgAlias);
+                                        const result = queryMetadata(query, (orgSummaryDirectory + '/' + dataPoint + '.csv'), orgAlias, errors);
                                         queryResults[dataPoint] = result instanceof Array ? result : [];
                                     } catch (error) {
-                                        errors.push(error);
+                                        // Errors are now handled in queryMetadata
                                     }
                                 }
 
-                                let ResultState = 'Completed';
-                                if (errors.length > 0) {
-                                    ResultState = 'Failed';
+                                const ResultState = errors.length > 0 ? 'Completed' : 'Failure';
+                                if (ResultState === 'Failure') {
                                     process.exitCode = 1;
                                 }
 
@@ -133,22 +148,17 @@ export function summarizeOrg(orgAlias?: string): summary {
                                         ApexTestMethodsFailed: testResult?.methodsFailed || 0,
                                         ApexOrgWideCoverage: orgWideApexCoverage || 0,
                                         FlowOrgWideCoverage: calculateFlowOrgWideCoverage(flowCoverage)
-                                    }
+                                    },
+                                    // CodeLines: {
+                                    //     Apex: {
+                                    //         Classes: apexCodeLines
+                                    //     }
+                                    // },
                                 };
-
                                 console.log('Summary:', summary);
                                 return summary;
-                            })
-                            .catch(error => {
-                                console.error('Error getting org-wide Apex coverage:', error.message);
                             });
-                    })
-                    .catch(error => {
-                        console.error('Error getting test run details:', error.message);
                     });
-            })
-            .catch(error => {
-                console.error('Error polling for test run results:', error.message);
             });
     }
 }
@@ -181,13 +191,13 @@ function getFlowCoverage(username: string): Record<string, number>[] {
 function calculateComponentSummary(queryResults: Record<string, unknown[]>): Record<string, unknown> {
     const componentSummary: Record<string, unknown> = {};
 
-    for (const dataPoint in queryResults) {
-        if (Object.prototype.hasOwnProperty.call(queryResults, dataPoint)) {
+    for (const dataPoint of dataPoints) {
+        if (queryResults[dataPoint]) {
             const results = queryResults[dataPoint];
             const resultLength = results.length;
 
             if (resultLength > 0) {
-                const lastRecord = results[0]; // Since we ordered by LastModifiedDate DESC, the first record has the latest modification
+                const lastRecord = results[0];
                 const lastModifiedDate = lastRecord.LastModifiedDate;
 
                 componentSummary[dataPoint] = {
@@ -195,8 +205,14 @@ function calculateComponentSummary(queryResults: Record<string, unknown[]>): Rec
                     Total: resultLength
                 };
             } else {
-                componentSummary[dataPoint] = { Total: 0 };
+                // Handle the case where the query returned no results
+                console.error(`No results found for '${dataPoint}'. Defaulting to 'N/A' in the summary.`);
+                componentSummary[dataPoint] = { Total: 'N/A' };
             }
+        } else {
+            // Handle the case where the query failed
+            console.error(`Query for '${dataPoint}' failed. Defaulting to 'N/A' in the summary.`);
+            componentSummary[dataPoint] = { Total: 'N/A' };
         }
     }
 
@@ -208,12 +224,12 @@ function buildQuery(dataPoint: string): string {
     return `SELECT CreatedBy.Name, CreatedDate, Id, LastModifiedBy.Name, LastModifiedDate FROM ${dataPoint} ORDER BY LastModifiedDate DESC`;
 }
 
-function queryMetadata(query: string, outputCsv: string, orgAlias?: string) {
+function queryMetadata(query: string, outputCsv: string, orgAlias?: string, errors: any[]) {
     let command;
     if (orgAlias) {
-        command = `sfdx data:query --query "${query}" --target-org "${orgAlias}" --result-format csv --use-tooling-api > ${outputCsv} `;
+        command = `sfdx data:query --query "${query}" --target-org "${orgAlias}" --result-format csv --use-tooling-api > ${outputCsv}`;
     } else {
-        command = `sfdx data:query --query "${query}" --result-format csv --use-tooling-api > ${outputCsv} `;
+        command = `sfdx data:query --query "${query}" --result-format csv --use-tooling-api > ${outputCsv}`;
     }
 
     try {
@@ -221,8 +237,19 @@ function queryMetadata(query: string, outputCsv: string, orgAlias?: string) {
         const csvData = fs.readFileSync(outputCsv, 'utf8');
         return parse(csvData, { columns: true });
     } catch (error) {
-        console.error(`Error executing command: ${command} `);
-        throw error;
+        handleQueryError(query, error, errors);
+        return [];
+    }
+}
+
+function handleQueryError(dataPoint: string, error: any, errors: any[]) {
+    // Handle errors related to unsupported sObject types
+    if (error.stderr.includes("sObject type") && error.stderr.includes("is not supported")) {
+        console.error(`Query for '${dataPoint}' is not supported. Defaulting to 'N/A' in the summary.`);
+        errors.push(null); // Push a null value to indicate a handled error
+    } else {
+        console.error(`Error executing query for '${dataPoint}': ${error.message}`);
+        errors.push(error);
     }
 }
 
@@ -244,13 +271,13 @@ function extractTestRunId(jsonFilePath: string): string | null {
     }
 }
 
-async function pollTestRunResult(jobId: string, orgAlias?: string) {
+async function pollTestRunResult(jobId: string, path: string, orgAlias?: string) {
     let status = 'Queued';
     while (status === 'Queued' || status === 'Processing') {
         try {
             const query = `SELECT Id, Status FROM AsyncApexJob WHERE Id = '${jobId}' LIMIT 1`;
             // eslint-disable-next-line no-await-in-loop
-            const result = await queryMetadata(query, './orgdata/testRunResult.json', orgAlias);
+            const result = await queryMetadata(query, path + '/testRunResult.json', orgAlias);
             if (result.length > 0) {
                 const testJob = result[0];
                 status = testJob.Status;
@@ -262,16 +289,16 @@ async function pollTestRunResult(jobId: string, orgAlias?: string) {
             status = 'Failed';
         }
         console.log(`Test Run Status: ${status}`);
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await new Promise(resolve => setTimeout(resolve, path, 5000));
     }
     console.log('Polling complete - Final Status:', status);
     return status;
 }
 
-async function getTestRunDetails(jobId: string, orgAlias?: string): Promise<{ outcome: string; runtime: number; methodsCompleted: number; methodsFailed: number } | null> {
+async function getTestRunDetails(jobId: string, path: string, orgAlias?: string): Promise<{ outcome: string; runtime: number; methodsCompleted: number; methodsFailed: number } | null> {
     try {
         const query = `SELECT Id, AsyncApexJobId, Status, StartTime, EndTime, TestTime, MethodsCompleted, MethodsFailed FROM ApexTestRunResult WHERE AsyncApexJobId = '${jobId}'`;
-        const results = await queryMetadata(query, './orgdata/testRunDetails.json', orgAlias);
+        const results = await queryMetadata(query, path + '/testRunDetails.json', orgAlias);
 
         if (results.length > 0) {
             const testRunResult = results[0];
@@ -294,17 +321,11 @@ async function getTestRunDetails(jobId: string, orgAlias?: string): Promise<{ ou
     }
 }
 
-async function getOrgWideApexCoverage(orgAlias?: string): Promise<number | null> {
+async function getOrgWideApexCoverage(path: string, orgAlias?: string): Promise<number | null> {
     try {
-        // Formulate SOQL query to get org-wide Apex coverage
         const query = 'SELECT PercentCovered FROM ApexOrgWideCoverage';
-        const results = await queryMetadata(query, './orgdata/orgWideApexCoverage.json', orgAlias);
-
-        // Calculate overall Apex coverage (average, sum, or as needed)
+        const results = await queryMetadata(query, path + '/orgWideApexCoverage.json', orgAlias);
         const overallCoverage = results.reduce((sum, result) => sum + result.PercentCovered, 0) / results.length;
-
-        console.log(`Org-wide Apex Coverage: ${overallCoverage}%`);
-
         return overallCoverage;
     } catch (error) {
         console.error('Error getting org-wide Apex coverage:', error.message);
