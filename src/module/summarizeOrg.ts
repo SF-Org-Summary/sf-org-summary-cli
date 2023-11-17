@@ -72,6 +72,7 @@ const dataPoints = [
 
 export function summarizeOrg(orgAlias?: string): summary {
     // PREP
+    const timestamp = Date.now().toString();
     const currentDate = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
     const dataDirectory = './orgsummary';
     if (!fs.existsSync(dataDirectory)) {
@@ -92,9 +93,9 @@ export function summarizeOrg(orgAlias?: string): summary {
     const username = JSON.parse(orgIdOutput).result.username;
 
     // Create dynamic directory path based on org ID
-    const orgSummaryDirectory = `./orgsummary/${orgId}`;
+    const orgSummaryDirectory = `./orgsummary/${orgId}/${timestamp}`;
     if (!fs.existsSync(orgSummaryDirectory)) {
-        fs.mkdirSync(orgSummaryDirectory);
+        fs.mkdirSync(orgSummaryDirectory, { recursive: true });
     }
 
     // RUN
