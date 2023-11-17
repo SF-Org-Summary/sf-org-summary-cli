@@ -69,4 +69,13 @@ export type summary = {
     ApexOrgWideCoverage: number;
     FlowOrgWideCoverage: number;
   };
+  // CodeLines: {
+  //   Apex: {
+  //     Classes: {
+  //       Total: number;
+  //       Comments: number;
+  //       Code: number;
+  //     };
+  //   };
+  // };
 };
