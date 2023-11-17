@@ -46,4 +46,4 @@ node_modules
 oclif.manifest.json
 
 # prevent accidental project data to be added
-/orgdata
+/orgsummary
