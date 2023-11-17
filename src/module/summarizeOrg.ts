@@ -72,6 +72,7 @@ const dataPoints = [
 
 export function summarizeOrg(orgAlias?: string): summary {
     // PREP
+    const currentDate = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
     const dataDirectory = './orgsummary';
     if (!fs.existsSync(dataDirectory)) {
         fs.mkdirSync(dataDirectory);
@@ -134,7 +135,7 @@ export function summarizeOrg(orgAlias?: string): summary {
                                 }
 
                                 const summary: summary = {
-                                    SummaryDate: new Date().toISOString().replace(/T/, ' ').replace(/\..+/, ''),
+                                    SummaryDate: currentDate,
                                     ResultState,
                                     OrgId: orgId,
                                     Username: username,
