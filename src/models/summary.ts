@@ -60,22 +60,40 @@ export type summary = {
     ValidationRule: { Total: number; LastModifiedDate?: string };
     WebLink: { Total: number; LastModifiedDate?: string };
   };
-  TestResults: {
-    ApexTestOutcome: string;
-    ApexTestDuration: string;
+  Tests: {
+    TestOutcome: string;
+    TestDuration: string;
     ApexUnitTests: number;
-    ApexTestMethodsCompleted: number;
-    ApexTestMethodsFailed: number;
-    ApexOrgWideCoverage: number;
-    FlowOrgWideCoverage: number;
+    TestMethodsCompleted: number;
+    TestMethodsFailed: number;
+    OrgWideApexCoverage: number;
+    OrgWideFlowCoverage: number;
   };
-  // CodeLines: {
-  //   Apex: {
-  //     Classes: {
-  //       Total: number;
-  //       Comments: number;
-  //       Code: number;
-  //     };
-  //   };
-  // };
+  CodeLines: {
+    ApexClass: {
+      Total: number;
+      Comments: number;
+      Code: number;
+    };
+    ApexTrigger: {
+      Total: number;
+      Comments: number;
+      Code: number;
+    };
+    AuraDefinitionBundle: {
+      Total: number;
+      Comments: number;
+      Code: number;
+    };
+    LightningComponentBundle: {
+      Total: number;
+      Comments: number;
+      Code: number;
+    };
+    StaticResource: {
+      Total: number;
+      Comments: number;
+      Code: number;
+    };
+  };
 };

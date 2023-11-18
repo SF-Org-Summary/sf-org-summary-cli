@@ -71,7 +71,9 @@ const dataPoints = [
 ];
 
 export function summarizeOrg(orgAlias?: string): summary {
+
     // PREP
+
     const timestamp = Date.now().toString();
     const currentDate = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
     const dataDirectory = './orgsummary';
@@ -84,21 +86,29 @@ export function summarizeOrg(orgAlias?: string): summary {
     } else {
         initialMessage = 'No Org Alias provided, queries will be running on the set default Org';
     }
-
     console.log(initialMessage);
     const orgIdCommand = `sfdx force:org:display --target-org "${orgAlias}" --json`;
     const orgIdOutput = execSync(orgIdCommand, { encoding: 'utf8' });
     const orgId = JSON.parse(orgIdOutput).result.id;
     const instanceURL = JSON.parse(orgIdOutput).result.instanceUrl;
     const username = JSON.parse(orgIdOutput).result.username;
-
-    // Create dynamic directory path based on org ID
     const orgSummaryDirectory = `./orgsummary/${orgId}/${timestamp}`;
     if (!fs.existsSync(orgSummaryDirectory)) {
         fs.mkdirSync(orgSummaryDirectory, { recursive: true });
     }
+    process.chdir(orgSummaryDirectory);
+    execSync('sfdx force:project:create -x -n tempSFDXProject');
+    process.chdir('./tempSFDXProject');
+    const apexClasses = retrieveApexClasses(orgAlias);
+    const apexTriggers = retrieveApexTriggers(orgAlias);
+    const auraComponents = retrieveAuraComponents(orgAlias);
+    const lwcMetadata = retrieveLWCMetadata(orgAlias);
+    const staticResources = retrieveStaticResources(orgAlias);
+    const codeLines = calculateCodeLines();
+    process.chdir('../../../../');
 
-    // RUN
+    // RUN TESTS
+
     const testResultsCommand = `sfdx force:apex:test:run --target-org "${orgAlias}" --test-level RunLocalTests --code-coverage --result-format json > ${orgSummaryDirectory}/testResults.json`;
     execSync(testResultsCommand, { encoding: 'utf8' });
     const testRunId = extractTestRunId(`${orgSummaryDirectory}/testResults.json`);
@@ -113,13 +123,8 @@ export function summarizeOrg(orgAlias?: string): summary {
                             .then(orgWideApexCoverage => {
                                 const flowCoverage = getFlowCoverage(orgAlias);
 
-                                // todo
-                                // const apexClasses = retrieveApexClasses(orgAlias);
-                                // const apexCodeLines = countCodeLines('./tempSFDXProject/force-app/main/default/classes');
-
                                 const queryResults: Record<string, unknown[]> = {};
                                 const errors = [];
-
                                 for (const dataPoint of dataPoints) {
                                     try {
                                         const query = buildQuery(dataPoint);
@@ -129,12 +134,10 @@ export function summarizeOrg(orgAlias?: string): summary {
                                         // Errors are now handled in queryMetadata
                                     }
                                 }
-
                                 const ResultState = errors.length > 0 ? 'Completed' : 'Failure';
                                 if (ResultState === 'Failure') {
                                     process.exitCode = 1;
                                 }
-
                                 const summary: summary = {
                                     SummaryDate: currentDate,
                                     ResultState,
@@ -142,20 +145,16 @@ export function summarizeOrg(orgAlias?: string): summary {
                                     Username: username,
                                     OrgInstanceURL: instanceURL,
                                     Components: calculateComponentSummary(queryResults),
-                                    TestResults: {
-                                        ApexTestOutcome: testResult?.outcome || 'N/A',
-                                        ApexTestDuration: testResult?.runtime.toString() || 'N/A',
+                                    Tests: {
+                                        TestOutcome: testResult?.outcome || 'N/A',
+                                        TestDuration: testResult?.runtime.toString() || 'N/A',
                                         ApexUnitTests: testResult?.methodsCompleted || 0,
-                                        ApexTestMethodsCompleted: testResult?.methodsCompleted || 0,
-                                        ApexTestMethodsFailed: testResult?.methodsFailed || 0,
-                                        ApexOrgWideCoverage: orgWideApexCoverage || 0,
-                                        FlowOrgWideCoverage: calculateFlowOrgWideCoverage(flowCoverage)
+                                        TestMethodsCompleted: testResult?.methodsCompleted || 0,
+                                        TestMethodsFailed: testResult?.methodsFailed || 0,
+                                        OrgWideApexCoverage: orgWideApexCoverage || 0,
+                                        OrgWideFlowCoverage: calculateFlowOrgWideCoverage(flowCoverage)
                                     },
-                                    // CodeLines: {
-                                    //     Apex: {
-                                    //         Classes: apexCodeLines
-                                    //     }
-                                    // },
+                                    'CodeLines': codeLines,
                                 };
                                 console.log('Summary:', summary);
                                 return summary;
@@ -169,7 +168,6 @@ function calculateFlowOrgWideCoverage(flowCoverage: Record<string, number>[]): n
     if (flowCoverage.length === 0) {
         return 0;
     }
-
     const totalCoverage = flowCoverage.reduce((sum, coverage) => sum + coverage, 0);
     return totalCoverage / flowCoverage.length;
 }
@@ -178,7 +176,6 @@ function getFlowCoverage(username: string): Record<string, number>[] {
     const flowCoverage = [];
     try {
         const flowCoverageResults = new GetFlowCoverage().getFlowCoverage(username);
-
         for (const record of flowCoverageResults.result.records) {
             const coveragePercentage =
                 (record.NumElementsCovered / (record.NumElementsCovered + record.NumElementsNotCovered)) * 100;
@@ -192,32 +189,29 @@ function getFlowCoverage(username: string): Record<string, number>[] {
 
 function calculateComponentSummary(queryResults: Record<string, unknown[]>): Record<string, unknown> {
     const componentSummary: Record<string, unknown> = {};
-
     for (const dataPoint of dataPoints) {
+        const key = dataPoint;
         if (queryResults[dataPoint]) {
             const results = queryResults[dataPoint];
             const resultLength = results.length;
-
             if (resultLength > 0) {
                 const lastRecord = results[0];
                 const lastModifiedDate = lastRecord.LastModifiedDate;
-
-                componentSummary[dataPoint] = {
-                    LastModifiedDate: lastModifiedDate,
-                    Total: resultLength
+                componentSummary[key] = {
+                    Total: resultLength,
+                    LastModifiedDate: lastModifiedDate
                 };
             } else {
                 // Handle the case where the query returned no results
                 console.error(`No results found for '${dataPoint}'. Defaulting to 'N/A' in the summary.`);
-                componentSummary[dataPoint] = { Total: 'N/A' };
+                componentSummary[key] = { Total: 'N/A' };
             }
         } else {
             // Handle the case where the query failed
             console.error(`Query for '${dataPoint}' failed. Defaulting to 'N/A' in the summary.`);
-            componentSummary[dataPoint] = { Total: 'N/A' };
+            componentSummary[key] = { Total: 'N/A' };
         }
     }
-
     return componentSummary;
 }
 
@@ -233,7 +227,6 @@ function queryMetadata(query: string, outputCsv: string, orgAlias?: string, erro
     } else {
         command = `sfdx data:query --query "${query}" --result-format csv --use-tooling-api > ${outputCsv}`;
     }
-
     try {
         execSync(command);
         const csvData = fs.readFileSync(outputCsv, 'utf8');
@@ -260,7 +253,6 @@ function extractTestRunId(jsonFilePath: string): string | null {
         const jsonData = fs.readFileSync(jsonFilePath, 'utf8');
         const regex = /-i\s*([0-9A-Za-z]{15})/;
         const match = jsonData.match(regex);
-
         if (match?.[1]) {
             return match[1];
         } else {
@@ -301,17 +293,13 @@ async function getTestRunDetails(jobId: string, path: string, orgAlias?: string)
     try {
         const query = `SELECT Id, AsyncApexJobId, Status, StartTime, EndTime, TestTime, MethodsCompleted, MethodsFailed FROM ApexTestRunResult WHERE AsyncApexJobId = '${jobId}'`;
         const results = await queryMetadata(query, path + '/testRunDetails.json', orgAlias);
-
         if (results.length > 0) {
             const testRunResult = results[0];
-
             const outcome = testRunResult.Status === 'Completed' && testRunResult.MethodsFailed === 0 ? 'Pass' : 'Fail';
             const runtime = testRunResult.TestTime;
             const methodsCompleted = testRunResult.MethodsCompleted;
             const methodsFailed = testRunResult.MethodsFailed;
-
             console.log(`Test Run Outcome: ${outcome}, Runtime: ${runtime}s`);
-
             return { outcome, runtime, methodsCompleted, methodsFailed };
         } else {
             console.log('No ApexTestRunResult found for the given jobId.');
@@ -335,3 +323,74 @@ async function getOrgWideApexCoverage(path: string, orgAlias?: string): Promise<
     }
 }
 
+function retrieveApexClasses(orgAlias?: string): string[] {
+    const retrieveCommand = `sf project retrieve start --metadata ApexClass --target-org ${orgAlias}`;
+    execSync(retrieveCommand, { encoding: 'utf8' });
+    const retrievedFiles = fs.readdirSync('./force-app/main/default/classes');
+    return retrievedFiles;
+}
+
+function retrieveApexTriggers(orgAlias?: string): string[] {
+    const retrieveCommand = `sf project retrieve start --metadata ApexTrigger --target-org ${orgAlias}`;
+    execSync(retrieveCommand, { encoding: 'utf8' });
+    const retrievedFiles = fs.readdirSync('./force-app/main/default/triggers');
+    return retrievedFiles;
+}
+
+function retrieveAuraComponents(orgAlias?: string): string[] {
+    const retrieveCommand = `sf project retrieve start --metadata AuraDefinitionBundle --target-org ${orgAlias}`;
+    execSync(retrieveCommand, { encoding: 'utf8' });
+    const retrievedFiles = fs.readdirSync('./force-app/main/default/aura');
+    return retrievedFiles;
+}
+
+function retrieveLWCMetadata(orgAlias?: string): string[] {
+    const retrieveCommand = `sf project retrieve start --metadata LightningComponentBundle --target-org ${orgAlias}`;
+    execSync(retrieveCommand, { encoding: 'utf8' });
+    const retrievedFiles = fs.readdirSync('./force-app/main/default/lwc');
+    return retrievedFiles;
+}
+
+function retrieveStaticResources(orgAlias?: string): string[] {
+    const retrieveCommand = `sf project retrieve start --metadata StaticResource --target-org ${orgAlias}`;
+    execSync(retrieveCommand, { encoding: 'utf8' });
+    const retrievedFiles = fs.readdirSync('./force-app/main/default/staticresources');
+    return retrievedFiles;
+}
+
+
+function countCodeLines(directory: string, extension: string, language: 'apex' | 'javascript'): { Total: number; Comments: number; Code: number } {
+    const codeFiles = fs.readdirSync(directory).filter(file => file.endsWith(extension));
+    let commentLines = 0;
+    let totalLines = 0;
+    codeFiles.forEach(file => {
+        const filePath = `${directory}/${file}`;
+        const fileContent = fs.readFileSync(filePath, 'utf8');
+        // Match comments based on the language
+        let comments;
+        if (language === 'apex') {
+            comments = fileContent.match(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g) || [];
+        } else if (language === 'javascript') {
+            comments = fileContent.match(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g) || [];
+        }
+        // Remove empty lines from total line count
+        const total = fileContent.split('\n').filter(line => line.trim() !== '').length;
+        commentLines += comments.length;
+        totalLines += total;
+    });
+    return {
+        Total: totalLines,
+        Comments: commentLines,
+        Code: totalLines - commentLines
+    };
+}
+
+function calculateCodeLines(): object {
+    return {
+        ApexClass: countCodeLines('./force-app/main/default/classes', '.cls', 'apex'),
+        ApexTrigger: countCodeLines('./force-app/main/default/triggers', '.trigger', 'apex'),
+        AuraDefinitionBundle: countCodeLines('./force-app/main/default/aura', '.js', 'javascript'),
+        LightningComponentBundle: countCodeLines('./force-app/main/default/lwc', '.js', 'javascript'),
+        StaticResource: countCodeLines('./force-app/main/default/lwc', '.js', 'javascript')
+    };
+}
