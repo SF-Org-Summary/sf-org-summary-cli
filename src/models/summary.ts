@@ -37,6 +37,7 @@ export type summary = {
     LookupFilter: { Total: number; LastModifiedDate?: string };
     MatchingRule: { Total: number; LastModifiedDate?: string };
     MarketingAppExtension: { Total: number; LastModifiedDate?: string };
+    ModerationRule: { Total: number; LastModifiedDate?: string };
     NamedCredential: { Total: number; LastModifiedDate?: string };
     OpportunitySplitType: { Total: number; LastModifiedDate?: string };
     OrgDomainLog: { Total: number; LastModifiedDate?: string };
