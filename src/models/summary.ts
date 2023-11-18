@@ -69,7 +69,7 @@ export type summary = {
     OrgWideApexCoverage: number;
     OrgWideFlowCoverage: number;
   };
-  CodeLines: {
+  LinesOfCode: {
     ApexClass: {
       Total: number;
       Comments: number;

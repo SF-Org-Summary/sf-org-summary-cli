@@ -152,7 +152,7 @@ export function summarizeOrg(orgAlias?: string): summary {
                                         OrgWideApexCoverage: orgWideApexCoverage || 0,
                                         OrgWideFlowCoverage: calculateFlowOrgWideCoverage(flowCoverage)
                                     },
-                                    'CodeLines': codeLines,
+                                    'LinesOfCode': codeLines,
                                 };
                                 console.log('Summary:', summary);
                                 return summary;
