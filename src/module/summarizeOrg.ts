@@ -203,12 +203,10 @@ function calculateComponentSummary(queryResults: Record<string, unknown[]>): Rec
                 };
             } else {
                 // Handle the case where the query returned no results
-                console.error(`No results found for '${dataPoint}'. Defaulting to 'N/A' in the summary.`);
                 componentSummary[key] = { Total: 'N/A' };
             }
         } else {
             // Handle the case where the query failed
-            console.error(`Query for '${dataPoint}' failed. Defaulting to 'N/A' in the summary.`);
             componentSummary[key] = { Total: 'N/A' };
         }
     }
