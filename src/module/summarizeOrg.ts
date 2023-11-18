@@ -73,7 +73,6 @@ const dataPoints = [
 export function summarizeOrg(orgAlias?: string): summary {
 
     // PREP
-
     const timestamp = Date.now().toString();
     const currentDate = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
     const dataDirectory = './orgsummary';
@@ -108,7 +107,6 @@ export function summarizeOrg(orgAlias?: string): summary {
     process.chdir('../../../../');
 
     // RUN TESTS
-
     const testResultsCommand = `sfdx force:apex:test:run --target-org "${orgAlias}" --test-level RunLocalTests --code-coverage --result-format json > ${orgSummaryDirectory}/testResults.json`;
     execSync(testResultsCommand, { encoding: 'utf8' });
     const testRunId = extractTestRunId(`${orgSummaryDirectory}/testResults.json`);
@@ -358,29 +356,44 @@ function retrieveStaticResources(orgAlias?: string): string[] {
 
 
 function countCodeLines(directory: string, extension: string, language: 'apex' | 'javascript'): { Total: number; Comments: number; Code: number } {
-    const codeFiles = fs.readdirSync(directory).filter(file => file.endsWith(extension));
+    const codeFiles = getAllFiles(directory, extension);
     let commentLines = 0;
     let totalLines = 0;
-    codeFiles.forEach(file => {
-        const filePath = `${directory}/${file}`;
+
+    codeFiles.forEach(filePath => {
         const fileContent = fs.readFileSync(filePath, 'utf8');
-        // Match comments based on the language
         let comments;
         if (language === 'apex') {
             comments = fileContent.match(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g) || [];
         } else if (language === 'javascript') {
             comments = fileContent.match(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g) || [];
         }
-        // Remove empty lines from total line count
         const total = fileContent.split('\n').filter(line => line.trim() !== '').length;
         commentLines += comments.length;
         totalLines += total;
     });
+
     return {
         Total: totalLines,
         Comments: commentLines,
         Code: totalLines - commentLines
     };
+}
+
+function getAllFiles(directory: string, extension: string): string[] {
+    const files: string[] = [];
+    const dirents = fs.readdirSync(directory, { withFileTypes: true });
+
+    for (const dirent of dirents) {
+        const fullPath = `${directory}/${dirent.name}`;
+        if (dirent.isDirectory()) {
+            files.push(...getAllFiles(fullPath, extension));
+        } else if (dirent.isFile() && dirent.name.endsWith(extension)) {
+            files.push(fullPath);
+        }
+    }
+
+    return files;
 }
 
 function calculateCodeLines(): object {
