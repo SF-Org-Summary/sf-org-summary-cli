@@ -62,11 +62,11 @@ export type summary = {
     WebLink: { Total: number; LastModifiedDate?: string };
   };
   Tests: {
-    TestOutcome: string;
-    TestDuration: string;
     ApexUnitTests: number;
+    TestDuration: string;
     TestMethodsCompleted: number;
     TestMethodsFailed: number;
+    TestOutcome: string;
     OrgWideApexCoverage: number;
     OrgWideFlowCoverage: number;
   };

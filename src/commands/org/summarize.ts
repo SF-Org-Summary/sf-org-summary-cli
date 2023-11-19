@@ -2,6 +2,7 @@ import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
 import { summarizeOrg } from '../../module/summarizeOrg';
 import { summary } from '../../models/summary'
+import { dataPoints } from '../../data/datapoints';
 
 Messages.importMessagesDirectory(__dirname);
 const messages = Messages.loadMessages('sf-org-summary', 'summarize');
@@ -21,14 +22,31 @@ export default class Summarize extends SfCommand<summary> {
       char: 'u',
       required: false,
     }),
+    notests: Flags.boolean({
+      summary: messages.getMessage('flags.name.summary'),
+      description: messages.getMessage('flags.name.description'),
+      char: 't',
+      required: false,
+    }),
+    datapoints: Flags.string({
+      summary: messages.getMessage('flags.name.summary'),
+      description: messages.getMessage('flags.name.description'),
+      char: 'd',
+      required: false,
+    })
   };
 
   public async run(): Promise<summary> {
     const { flags } = await this.parse(Summarize);
-    if (flags.targetusername) {
-      return summarizeOrg(flags.targetusername);
+
+    const selectedDataPoints = flags.datapoints ? (flags.datapoints).split(',') : dataPoints;
+
+    if (flags.targetusername && flags.notests) {
+      return summarizeOrg(selectedDataPoints, flags.targetusername, flags.notests);
+    } else if (flags.targetusername) {
+      return summarizeOrg(selectedDataPoints, flags.targetusername);
     } else {
-      return summarizeOrg();
+      return summarizeOrg(selectedDataPoints);
     }
   }
 
