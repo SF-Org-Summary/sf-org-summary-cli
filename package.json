@@ -1,6 +1,6 @@
 {
   "name": "sf-org-summary",
-  "description": "",
+  "description": "## Overview",
   "version": "0.0.1",
   "dependencies": {
     "@oclif/core": "^2.15.0",

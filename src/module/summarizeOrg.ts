@@ -11,66 +11,9 @@ import parse = require('csv-parse/lib/sync');
 import { summary } from '../models/summary';
 import { GetFlowCoverage } from '../libs/GetFlowCoverage';
 
-const dataPoints = [
-    'AIApplication',
-    'ApexClass',
-    'ApexExecutionOverlayAction',
-    'ApexPage',
-    'ApexTrigger',
-    'AuraDefinitionBundle',
-    'AutoResponseRule',
-    'BusinessProcessDefinition',
-    'BrandingSet',
-    'CleanDataService',
-    'CleanRule',
-    'CustomApplication',
-    'CustomField',
-    'CustomHttpHeader',
-    'CspTrustedSite',
-    'CustomObject',
-    'CustomTab',
-    'DataIntegrationRecordPurchasePermission',
-    'DuplicateJobDefinition',
-    'EmailTemplate',
-    'ExternalDataSource',
-    'FieldSet',
-    'FlowDefinition',
-    'GlobalValueSet',
-    'Group',
-    'HomePageLayout',
-    'InboundNetworkConnection',
-    'LightningComponentBundle',
-    'Layout',
-    'LookupFilter',
-    'MatchingRule',
-    'MarketingAppExtension',
-    'NamedCredential',
-    'OpportunitySplitType',
-    'OrgDomainLog',
-    'OutboundNetworkConnection',
-    'Package2',
-    'PathAssistant',
-    'PermissionSet',
-    'PermissionSetGroup',
-    'PermissionSet',
-    'PlatformEventChannel',
-    'PostTemplate',
-    'Profile',
-    'QuickActionDefinition',
-    'FieldSet',
-    'RecordType',
-    'RecommendationStrategy',
-    'RemoteProxy',
-    'RestrictionRule',
-    'SchedulingRule',
-    'Scontrol',
-    'StaticResource',
-    'TransactionSecurityPolicy',
-    'ValidationRule',
-    'WebLink'
-];
+export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests: boolean = false): summary {
 
-export function summarizeOrg(orgAlias?: string): summary {
+    console.log('dataPoints', dataPoints);
     // PREP
     const timestamp = Date.now().toString();
     const currentDate = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
@@ -84,84 +27,92 @@ export function summarizeOrg(orgAlias?: string): summary {
     } else {
         initialMessage = 'No Org Alias provided, queries will be running on the set default Org';
     }
-
     console.log(initialMessage);
     const orgIdCommand = `sfdx force:org:display --target-org "${orgAlias}" --json`;
     const orgIdOutput = execSync(orgIdCommand, { encoding: 'utf8' });
     const orgId = JSON.parse(orgIdOutput).result.id;
     const instanceURL = JSON.parse(orgIdOutput).result.instanceUrl;
     const username = JSON.parse(orgIdOutput).result.username;
-
-    // Create dynamic directory path based on org ID
     const orgSummaryDirectory = `./orgsummary/${orgId}/${timestamp}`;
     if (!fs.existsSync(orgSummaryDirectory)) {
         fs.mkdirSync(orgSummaryDirectory, { recursive: true });
     }
 
-    // RUN
-    const testResultsCommand = `sfdx force:apex:test:run --target-org "${orgAlias}" --test-level RunLocalTests --code-coverage --result-format json > ${orgSummaryDirectory}/testResults.json`;
-    execSync(testResultsCommand, { encoding: 'utf8' });
-    const testRunId = extractTestRunId(`${orgSummaryDirectory}/testResults.json`);
-    console.log('testRunId', testRunId);
-    if (testRunId) {
-        console.log(`Checking Status of Job "${testRunId}"...`);
-        pollTestRunResult(testRunId, orgSummaryDirectory, orgAlias)
-            .then(() => {
-                getTestRunDetails(testRunId, orgSummaryDirectory, orgAlias)
-                    .then(testResult => {
-                        getOrgWideApexCoverage(orgSummaryDirectory, orgAlias)
-                            .then(orgWideApexCoverage => {
-                                const flowCoverage = getFlowCoverage(orgAlias);
+    // CALCULATE LINES OF CODE
+    process.chdir(orgSummaryDirectory);
+    execSync('sfdx force:project:create -x -n tempSFDXProject');
+    process.chdir('./tempSFDXProject');
+    const apexClasses = retrieveApexClasses(orgAlias);
+    const apexTriggers = retrieveApexTriggers(orgAlias);
+    const auraComponents = retrieveAuraComponents(orgAlias);
+    const lwcMetadata = retrieveLWCMetadata(orgAlias);
+    const staticResources = retrieveStaticResources(orgAlias);
+    const codeLines = calculateCodeLines();
+    process.chdir('../../../../');
 
-                                // todo
-                                // const apexClasses = retrieveApexClasses(orgAlias);
-                                // const apexCodeLines = countCodeLines('./tempSFDXProject/force-app/main/default/classes');
+    // QUERY TOOLING API DATAPOINTS
+    const { queryResults, errors } = queryDataPoints(dataPoints, orgSummaryDirectory, orgAlias);
 
-                                const queryResults: Record<string, unknown[]> = {};
-                                const errors = [];
+    // RUN APEX TESTS
+    if (!skipTests) {
+        const testResultsCommand = `sfdx force:apex:test:run --target-org "${orgAlias}" --test-level RunLocalTests --code-coverage --result-format json > ${orgSummaryDirectory}/testResults.json`;
+        execSync(testResultsCommand, { encoding: 'utf8' });
+        const testRunId = extractTestRunId(`${orgSummaryDirectory}/testResults.json`);
+        console.log('testRunId', testRunId);
+        if (testRunId) {
+            console.log(`Checking Status of Job "${testRunId}"...`);
+            pollTestRunResult(testRunId, orgSummaryDirectory, orgAlias)
+                .then(() => {
+                    getTestRunDetails(testRunId, orgSummaryDirectory, orgAlias)
+                        .then(testResult => {
+                            getOrgWideApexCoverage(orgSummaryDirectory, orgAlias)
+                                .then(orgWideApexCoverage => {
+                                    const flowCoverage = getFlowCoverage(orgAlias);
 
-                                for (const dataPoint of dataPoints) {
-                                    try {
-                                        const query = buildQuery(dataPoint);
-                                        const result = queryMetadata(query, (orgSummaryDirectory + '/' + dataPoint + '.csv'), orgAlias, errors);
-                                        queryResults[dataPoint] = result instanceof Array ? result : [];
-                                    } catch (error) {
-                                        // Errors are now handled in queryMetadata
+                                    const ResultState = errors.length > 0 ? 'Completed' : 'Failure';
+                                    if (ResultState === 'Failure') {
+                                        process.exitCode = 1;
                                     }
-                                }
-
-                                const ResultState = errors.length > 0 ? 'Completed' : 'Failure';
-                                if (ResultState === 'Failure') {
-                                    process.exitCode = 1;
-                                }
-
-                                const summary: summary = {
-                                    SummaryDate: currentDate,
-                                    ResultState,
-                                    OrgId: orgId,
-                                    Username: username,
-                                    OrgInstanceURL: instanceURL,
-                                    Components: calculateComponentSummary(queryResults),
-                                    TestResults: {
-                                        ApexTestOutcome: testResult?.outcome || 'N/A',
-                                        ApexTestDuration: testResult?.runtime.toString() || 'N/A',
-                                        ApexUnitTests: testResult?.methodsCompleted || 0,
-                                        ApexTestMethodsCompleted: testResult?.methodsCompleted || 0,
-                                        ApexTestMethodsFailed: testResult?.methodsFailed || 0,
-                                        ApexOrgWideCoverage: orgWideApexCoverage || 0,
-                                        FlowOrgWideCoverage: calculateFlowOrgWideCoverage(flowCoverage)
-                                    },
-                                    // CodeLines: {
-                                    //     Apex: {
-                                    //         Classes: apexCodeLines
-                                    //     }
-                                    // },
-                                };
-                                console.log('Summary:', summary);
-                                return summary;
-                            });
-                    });
-            });
+                                    const summary: summary = {
+                                        SummaryDate: currentDate,
+                                        ResultState,
+                                        OrgId: orgId,
+                                        Username: username,
+                                        OrgInstanceURL: instanceURL,
+                                        Components: calculateComponentSummary(dataPoints, queryResults),
+                                        Tests: {
+                                            ApexUnitTests: testResult?.methodsCompleted || 0,
+                                            TestDuration: testResult?.runtime.toString() || 'N/A',
+                                            TestMethodsCompleted: testResult?.methodsCompleted || 0,
+                                            TestMethodsFailed: testResult?.methodsFailed || 0,
+                                            TestOutcome: testResult?.outcome || 'N/A',
+                                            OrgWideApexCoverage: orgWideApexCoverage || 0,
+                                            OrgWideFlowCoverage: calculateFlowOrgWideCoverage(flowCoverage)
+                                        },
+                                        'LinesOfCode': codeLines,
+                                    };
+                                    console.log('Summary:', summary);
+                                    return summary;
+                                });
+                        });
+                });
+        }
+    } else {
+        const ResultState = errors.length > 0 ? 'Completed' : 'Failure';
+        if (ResultState === 'Failure') {
+            process.exitCode = 1;
+        }
+        const summary: summary = {
+            SummaryDate: currentDate,
+            ResultState,
+            OrgId: orgId,
+            Username: username,
+            OrgInstanceURL: instanceURL,
+            Components: calculateComponentSummary(dataPoints, queryResults),
+            'LinesOfCode': codeLines,
+        };
+        console.log('Summary:', summary);
+        return summary;
     }
 }
 
@@ -169,7 +120,6 @@ function calculateFlowOrgWideCoverage(flowCoverage: Record<string, number>[]): n
     if (flowCoverage.length === 0) {
         return 0;
     }
-
     const totalCoverage = flowCoverage.reduce((sum, coverage) => sum + coverage, 0);
     return totalCoverage / flowCoverage.length;
 }
@@ -178,7 +128,6 @@ function getFlowCoverage(username: string): Record<string, number>[] {
     const flowCoverage = [];
     try {
         const flowCoverageResults = new GetFlowCoverage().getFlowCoverage(username);
-
         for (const record of flowCoverageResults.result.records) {
             const coveragePercentage =
                 (record.NumElementsCovered / (record.NumElementsCovered + record.NumElementsNotCovered)) * 100;
@@ -190,34 +139,29 @@ function getFlowCoverage(username: string): Record<string, number>[] {
     return flowCoverage;
 }
 
-function calculateComponentSummary(queryResults: Record<string, unknown[]>): Record<string, unknown> {
+function calculateComponentSummary(dataPoints: string[], queryResults: Record<string, unknown[]>): Record<string, unknown> {
     const componentSummary: Record<string, unknown> = {};
-
     for (const dataPoint of dataPoints) {
+        const key = dataPoint;
         if (queryResults[dataPoint]) {
             const results = queryResults[dataPoint];
             const resultLength = results.length;
-
             if (resultLength > 0) {
                 const lastRecord = results[0];
                 const lastModifiedDate = lastRecord.LastModifiedDate;
-
-                componentSummary[dataPoint] = {
-                    LastModifiedDate: lastModifiedDate,
-                    Total: resultLength
+                componentSummary[key] = {
+                    Total: resultLength,
+                    LastModifiedDate: lastModifiedDate
                 };
             } else {
                 // Handle the case where the query returned no results
-                console.error(`No results found for '${dataPoint}'. Defaulting to 'N/A' in the summary.`);
-                componentSummary[dataPoint] = { Total: 'N/A' };
+                componentSummary[key] = { Total: 'N/A' };
             }
         } else {
             // Handle the case where the query failed
-            console.error(`Query for '${dataPoint}' failed. Defaulting to 'N/A' in the summary.`);
-            componentSummary[dataPoint] = { Total: 'N/A' };
+            componentSummary[key] = { Total: 'N/A' };
         }
     }
-
     return componentSummary;
 }
 
@@ -233,7 +177,6 @@ function queryMetadata(query: string, outputCsv: string, orgAlias?: string, erro
     } else {
         command = `sfdx data:query --query "${query}" --result-format csv --use-tooling-api > ${outputCsv}`;
     }
-
     try {
         execSync(command);
         const csvData = fs.readFileSync(outputCsv, 'utf8');
@@ -260,7 +203,6 @@ function extractTestRunId(jsonFilePath: string): string | null {
         const jsonData = fs.readFileSync(jsonFilePath, 'utf8');
         const regex = /-i\s*([0-9A-Za-z]{15})/;
         const match = jsonData.match(regex);
-
         if (match?.[1]) {
             return match[1];
         } else {
@@ -297,21 +239,33 @@ async function pollTestRunResult(jobId: string, path: string, orgAlias?: string)
     return status;
 }
 
+function queryDataPoints(dataPoints: string[], orgSummaryDirectory, orgAlias?) {
+    // QUERY TOOLING API DATAPOINTS
+    const queryResults: Record<string, unknown[]> = {};
+    const errors = [];
+    for (const dataPoint of dataPoints) {
+        try {
+            const query = buildQuery(dataPoint);
+            const result = queryMetadata(query, (orgSummaryDirectory + '/' + dataPoint + '.csv'), orgAlias, errors);
+            queryResults[dataPoint] = result instanceof Array ? result : [];
+        } catch (error) {
+            // Errors are now handled in queryMetadata
+        }
+    }
+    return { queryResults, errors }
+}
+
 async function getTestRunDetails(jobId: string, path: string, orgAlias?: string): Promise<{ outcome: string; runtime: number; methodsCompleted: number; methodsFailed: number } | null> {
     try {
         const query = `SELECT Id, AsyncApexJobId, Status, StartTime, EndTime, TestTime, MethodsCompleted, MethodsFailed FROM ApexTestRunResult WHERE AsyncApexJobId = '${jobId}'`;
         const results = await queryMetadata(query, path + '/testRunDetails.json', orgAlias);
-
         if (results.length > 0) {
             const testRunResult = results[0];
-
             const outcome = testRunResult.Status === 'Completed' && testRunResult.MethodsFailed === 0 ? 'Pass' : 'Fail';
             const runtime = testRunResult.TestTime;
             const methodsCompleted = testRunResult.MethodsCompleted;
             const methodsFailed = testRunResult.MethodsFailed;
-
             console.log(`Test Run Outcome: ${outcome}, Runtime: ${runtime}s`);
-
             return { outcome, runtime, methodsCompleted, methodsFailed };
         } else {
             console.log('No ApexTestRunResult found for the given jobId.');
@@ -335,3 +289,88 @@ async function getOrgWideApexCoverage(path: string, orgAlias?: string): Promise<
     }
 }
 
+function retrieveApexClasses(orgAlias?: string): string[] {
+    const retrieveCommand = `sf project retrieve start --metadata ApexClass --target-org ${orgAlias}`;
+    execSync(retrieveCommand, { encoding: 'utf8' });
+    const retrievedFiles = fs.readdirSync('./force-app/main/default/classes');
+    return retrievedFiles;
+}
+
+function retrieveApexTriggers(orgAlias?: string): string[] {
+    const retrieveCommand = `sf project retrieve start --metadata ApexTrigger --target-org ${orgAlias}`;
+    execSync(retrieveCommand, { encoding: 'utf8' });
+    const retrievedFiles = fs.readdirSync('./force-app/main/default/triggers');
+    return retrievedFiles;
+}
+
+function retrieveAuraComponents(orgAlias?: string): string[] {
+    const retrieveCommand = `sf project retrieve start --metadata AuraDefinitionBundle --target-org ${orgAlias}`;
+    execSync(retrieveCommand, { encoding: 'utf8' });
+    const retrievedFiles = fs.readdirSync('./force-app/main/default/aura');
+    return retrievedFiles;
+}
+
+function retrieveLWCMetadata(orgAlias?: string): string[] {
+    const retrieveCommand = `sf project retrieve start --metadata LightningComponentBundle --target-org ${orgAlias}`;
+    execSync(retrieveCommand, { encoding: 'utf8' });
+    const retrievedFiles = fs.readdirSync('./force-app/main/default/lwc');
+    return retrievedFiles;
+}
+
+function retrieveStaticResources(orgAlias?: string): string[] {
+    const retrieveCommand = `sf project retrieve start --metadata StaticResource --target-org ${orgAlias}`;
+    execSync(retrieveCommand, { encoding: 'utf8' });
+    const retrievedFiles = fs.readdirSync('./force-app/main/default/staticresources');
+    return retrievedFiles;
+}
+
+function countCodeLines(directory: string, extension: string, language: 'apex' | 'javascript'): { Total: number; Comments: number; Code: number } {
+    const codeFiles = getAllFiles(directory, extension);
+    let commentLines = 0;
+    let totalLines = 0;
+
+    codeFiles.forEach(filePath => {
+        const fileContent = fs.readFileSync(filePath, 'utf8');
+        let comments;
+        if (language === 'apex') {
+            comments = fileContent.match(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g) || [];
+        } else if (language === 'javascript') {
+            comments = fileContent.match(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g) || [];
+        }
+        const total = fileContent.split('\n').filter(line => line.trim() !== '').length;
+        commentLines += comments.length;
+        totalLines += total;
+    });
+
+    return {
+        Total: totalLines,
+        Comments: commentLines,
+        Code: totalLines - commentLines
+    };
+}
+
+function getAllFiles(directory: string, extension: string): string[] {
+    const files: string[] = [];
+    const dirents = fs.readdirSync(directory, { withFileTypes: true });
+
+    for (const dirent of dirents) {
+        const fullPath = `${directory}/${dirent.name}`;
+        if (dirent.isDirectory()) {
+            files.push(...getAllFiles(fullPath, extension));
+        } else if (dirent.isFile() && dirent.name.endsWith(extension)) {
+            files.push(fullPath);
+        }
+    }
+
+    return files;
+}
+
+function calculateCodeLines(): object {
+    return {
+        ApexClass: countCodeLines('./force-app/main/default/classes', '.cls', 'apex'),
+        ApexTrigger: countCodeLines('./force-app/main/default/triggers', '.trigger', 'apex'),
+        AuraDefinitionBundle: countCodeLines('./force-app/main/default/aura', '.js', 'javascript'),
+        LightningComponentBundle: countCodeLines('./force-app/main/default/lwc', '.js', 'javascript'),
+        StaticResource: countCodeLines('./force-app/main/default/lwc', '.js', 'javascript')
+    };
+}

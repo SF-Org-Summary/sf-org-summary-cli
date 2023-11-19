@@ -37,6 +37,7 @@ export type summary = {
     LookupFilter: { Total: number; LastModifiedDate?: string };
     MatchingRule: { Total: number; LastModifiedDate?: string };
     MarketingAppExtension: { Total: number; LastModifiedDate?: string };
+    ModerationRule: { Total: number; LastModifiedDate?: string };
     NamedCredential: { Total: number; LastModifiedDate?: string };
     OpportunitySplitType: { Total: number; LastModifiedDate?: string };
     OrgDomainLog: { Total: number; LastModifiedDate?: string };
@@ -60,22 +61,40 @@ export type summary = {
     ValidationRule: { Total: number; LastModifiedDate?: string };
     WebLink: { Total: number; LastModifiedDate?: string };
   };
-  TestResults: {
-    ApexTestOutcome: string;
-    ApexTestDuration: string;
+  Tests: {
     ApexUnitTests: number;
-    ApexTestMethodsCompleted: number;
-    ApexTestMethodsFailed: number;
-    ApexOrgWideCoverage: number;
-    FlowOrgWideCoverage: number;
+    TestDuration: string;
+    TestMethodsCompleted: number;
+    TestMethodsFailed: number;
+    TestOutcome: string;
+    OrgWideApexCoverage: number;
+    OrgWideFlowCoverage: number;
   };
-  // CodeLines: {
-  //   Apex: {
-  //     Classes: {
-  //       Total: number;
-  //       Comments: number;
-  //       Code: number;
-  //     };
-  //   };
-  // };
+  LinesOfCode: {
+    ApexClass: {
+      Total: number;
+      Comments: number;
+      Code: number;
+    };
+    ApexTrigger: {
+      Total: number;
+      Comments: number;
+      Code: number;
+    };
+    AuraDefinitionBundle: {
+      Total: number;
+      Comments: number;
+      Code: number;
+    };
+    LightningComponentBundle: {
+      Total: number;
+      Comments: number;
+      Code: number;
+    };
+    StaticResource: {
+      Total: number;
+      Comments: number;
+      Code: number;
+    };
+  };
 };
