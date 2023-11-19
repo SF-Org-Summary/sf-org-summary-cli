@@ -1,7 +1,7 @@
 import { TestContext } from '@salesforce/core/lib/testSetup';
 import { expect } from 'chai';
 import { stubSfCommandUx } from '@salesforce/sf-plugins-core';
-import Summarize from '../../src/commands/summarize';
+import Summarize from '../../src/commands/org/summarize';
 
 describe('summarize', () => {
   const $$ = new TestContext();
@@ -26,8 +26,8 @@ describe('summarize', () => {
 
   it('runs hello with --json and no provided name', async () => {
     const result = await Summarize.run([]);
-    expect(result.path).to.equal(
-      '/Users/rubenhalman/IdeaProjects/sf-org-summary/sf-org-summary/src/commands/summarize.ts'
+    expect(result.ResultState).to.equal(
+      'Completed'
     );
   });
 

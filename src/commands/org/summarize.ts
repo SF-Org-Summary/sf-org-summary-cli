@@ -1,8 +1,18 @@
+/* eslint-disable @typescript-eslint/member-ordering */
+/* eslint-disable sf-plugin/no-hardcoded-messages-flags */
+/* eslint-disable @typescript-eslint/require-await */
+/* eslint-disable class-methods-use-this */
+/* eslint-disable @typescript-eslint/no-floating-promises */
+/* eslint-disable @typescript-eslint/array-type */
+/* eslint-disable @typescript-eslint/restrict-plus-operands */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable no-await-in-loop */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
 import { summarizeOrg } from '../../module/summarizeOrg';
 import { summary } from '../../models/summary'
-import { dataPoints } from '../../data/datapoints';
+import { dataPoints } from '../../data/DataPoints';
 
 Messages.importMessagesDirectory(__dirname);
 const messages = Messages.loadMessages('sf-org-summary', 'summarize');

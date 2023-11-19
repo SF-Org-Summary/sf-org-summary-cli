@@ -5,7 +5,18 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-shadow */
-import { execSync } from 'child_process';
+/* eslint-disable @typescript-eslint/member-ordering */
+/* eslint-disable sf-plugin/no-hardcoded-messages-flags */
+/* eslint-disable @typescript-eslint/require-await */
+/* eslint-disable class-methods-use-this */
+/* eslint-disable @typescript-eslint/no-floating-promises */
+/* eslint-disable @typescript-eslint/array-type */
+/* eslint-disable @typescript-eslint/restrict-plus-operands */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable no-await-in-loop */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+
+import { execSync } from 'node:child_process';
 import fs = require('fs');
 import parse = require('csv-parse/lib/sync');
 import { summary } from '../models/summary';
@@ -42,11 +53,11 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
     process.chdir(orgSummaryDirectory);
     execSync('sfdx force:project:create -x -n tempSFDXProject');
     process.chdir('./tempSFDXProject');
-    const apexClasses = retrieveApexClasses(orgAlias);
-    const apexTriggers = retrieveApexTriggers(orgAlias);
-    const auraComponents = retrieveAuraComponents(orgAlias);
-    const lwcMetadata = retrieveLWCMetadata(orgAlias);
-    const staticResources = retrieveStaticResources(orgAlias);
+    retrieveApexClasses(orgAlias);
+    retrieveApexTriggers(orgAlias);
+    retrieveAuraComponents(orgAlias);
+    retrieveLWCMetadata(orgAlias);
+    retrieveStaticResources(orgAlias);
     const codeLines = calculateCodeLines();
     process.chdir('../../../../');
 
@@ -81,13 +92,13 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
                                         OrgInstanceURL: instanceURL,
                                         Components: calculateComponentSummary(dataPoints, queryResults),
                                         Tests: {
-                                            ApexUnitTests: testResult?.methodsCompleted || 0,
-                                            TestDuration: testResult?.runtime.toString() || 'N/A',
-                                            TestMethodsCompleted: testResult?.methodsCompleted || 0,
-                                            TestMethodsFailed: testResult?.methodsFailed || 0,
-                                            TestOutcome: testResult?.outcome || 'N/A',
-                                            OrgWideApexCoverage: orgWideApexCoverage || 0,
-                                            OrgWideFlowCoverage: calculateFlowOrgWideCoverage(flowCoverage)
+                                            ApexUnitTests: testResult?.methodsCompleted ?? 0,
+                                            TestDuration: testResult?.runtime.toString() ?? 'N/A',
+                                            TestMethodsCompleted: testResult?.methodsCompleted ?? 0,
+                                            TestMethodsFailed: testResult?.methodsFailed ?? 0,
+                                            TestOutcome: testResult?.outcome ?? 'N/A',
+                                            OrgWideApexCoverage: orgWideApexCoverage ?? 0,
+                                            OrgWideFlowCoverage: calculateFlowOrgWideCoverage(flowCoverage) ?? 0
                                         },
                                         'LinesOfCode': codeLines,
                                     };
@@ -189,7 +200,7 @@ function queryMetadata(query: string, outputCsv: string, orgAlias?: string, erro
 
 function handleQueryError(dataPoint: string, error: any, errors: any[]) {
     // Handle errors related to unsupported sObject types
-    if (error.stderr.includes("sObject type") && error.stderr.includes("is not supported")) {
+    if (error.stderr.includes('sObject type') && error.stderr.includes('is not supported')) {
         console.error(`Query for '${dataPoint}' is not supported. Defaulting to 'N/A' in the summary.`);
         errors.push(null); // Push a null value to indicate a handled error
     } else {
@@ -333,9 +344,9 @@ function countCodeLines(directory: string, extension: string, language: 'apex' |
         const fileContent = fs.readFileSync(filePath, 'utf8');
         let comments;
         if (language === 'apex') {
-            comments = fileContent.match(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g) || [];
+            comments = fileContent.match(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g) ?? [];
         } else if (language === 'javascript') {
-            comments = fileContent.match(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g) || [];
+            comments = fileContent.match(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g) ?? [];
         }
         const total = fileContent.split('\n').filter(line => line.trim() !== '').length;
         commentLines += comments.length;
