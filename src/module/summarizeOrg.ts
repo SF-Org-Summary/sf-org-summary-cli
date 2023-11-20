@@ -100,7 +100,7 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
                                             OrgWideApexCoverage: orgWideApexCoverage ?? 0,
                                             OrgWideFlowCoverage: calculateFlowOrgWideCoverage(flowCoverage) ?? 0
                                         },
-                                        'LinesOfCode': codeLines,
+                                        LinesOfCode: codeLines,
                                     };
                                     console.log('Summary:', summary);
                                     return summary;
@@ -120,11 +120,12 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
             Username: username,
             OrgInstanceURL: instanceURL,
             Components: calculateComponentSummary(dataPoints, queryResults),
-            'LinesOfCode': codeLines,
+            LinesOfCode: codeLines,
         };
         console.log('Summary:', summary);
         return summary;
     }
+    return undefined;
 }
 
 function calculateFlowOrgWideCoverage(flowCoverage: Record<string, number>[]): number {
@@ -250,7 +251,7 @@ async function pollTestRunResult(jobId: string, path: string, orgAlias?: string)
     return status;
 }
 
-function queryDataPoints(dataPoints: string[], orgSummaryDirectory, orgAlias?) {
+function queryDataPoints(dataPoints: string[], orgSummaryDirectory: string, orgAlias?: string | undefined) {
     // QUERY TOOLING API DATAPOINTS
     const queryResults: Record<string, unknown[]> = {};
     const errors = [];
@@ -342,7 +343,7 @@ function countCodeLines(directory: string, extension: string, language: 'apex' |
 
     codeFiles.forEach(filePath => {
         const fileContent = fs.readFileSync(filePath, 'utf8');
-        let comments;
+        let comments = [];
         if (language === 'apex') {
             comments = fileContent.match(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g) ?? [];
         } else if (language === 'javascript') {

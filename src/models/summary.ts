@@ -4,7 +4,7 @@ export type summary = {
   OrgId: string;
   OrgInstanceURL: string;
   Username: string;
-  Components: {
+  Components?: {
     AIApplication: { Total: number; LastModifiedDate?: string };
     ApexClass: { Total: number; LastModifiedDate?: string };
     ApexExecutionOverlayAction: { Total: number; LastModifiedDate?: string };
@@ -61,7 +61,7 @@ export type summary = {
     ValidationRule: { Total: number; LastModifiedDate?: string };
     WebLink: { Total: number; LastModifiedDate?: string };
   };
-  Tests: {
+  Tests?: {
     ApexUnitTests: number;
     TestDuration: string;
     TestMethodsCompleted: number;
@@ -70,7 +70,7 @@ export type summary = {
     OrgWideApexCoverage: number;
     OrgWideFlowCoverage: number;
   };
-  LinesOfCode: {
+  LinesOfCode?: {
     ApexClass: {
       Total: number;
       Comments: number;
