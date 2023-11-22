@@ -20,7 +20,6 @@ import { execSync } from 'node:child_process';
 import fs = require('fs');
 import parse = require('csv-parse/lib/sync');
 import { summary } from '../models/summary';
-import { GetFlowCoverage } from '../libs/GetFlowCoverage';
 
 export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests: boolean = false): summary {
 
@@ -78,7 +77,7 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
                         .then(testResult => {
                             getOrgWideApexCoverage(orgSummaryDirectory, orgAlias)
                                 .then(orgWideApexCoverage => {
-                                    const flowCoverage = getFlowCoverage(orgAlias);
+                                    const flowCoverage = calculateFlowCoverage(orgAlias);
 
                                     const ResultState = errors.length > 0 ? 'Completed' : 'Failure';
                                     if (ResultState === 'Failure') {
@@ -136,10 +135,10 @@ function calculateFlowOrgWideCoverage(flowCoverage: Record<string, number>[]): n
     return totalCoverage / flowCoverage.length;
 }
 
-function getFlowCoverage(username: string): Record<string, number>[] {
+function calculateFlowCoverage(orgAlias?: string): Record<string, number>[] {
     const flowCoverage = [];
     try {
-        const flowCoverageResults = new GetFlowCoverage().getFlowCoverage(username);
+        const flowCoverageResults = orgAlias ? getFlowCoverage(orgAlias) : getFlowCoverage();
         for (const record of flowCoverageResults.result.records) {
             const coveragePercentage =
                 (record.NumElementsCovered / (record.NumElementsCovered + record.NumElementsNotCovered)) * 100;
@@ -182,7 +181,13 @@ function buildQuery(dataPoint: string): string {
     return `SELECT CreatedBy.Name, CreatedDate, Id, LastModifiedBy.Name, LastModifiedDate FROM ${dataPoint} ORDER BY LastModifiedDate DESC`;
 }
 
-function queryMetadata(query: string, outputCsv: string, orgAlias?: string, errors: any[]) {
+function getFlowCoverage(orgAlias?: string) {
+    const command = `sfdx force:data:soql:query -q "SELECT Id, ApexTestClassId, TestMethodName, FlowVersionId, NumElementsCovered, NumElementsNotCovered FROM FlowTestCoverage" -u ${orgAlias} -t --json`;
+    const output = execSync(command, { encoding: 'utf8' });
+    return JSON.parse(output) as FlowCoverageResult;
+}
+
+function queryMetadata(query: string, outputCsv: string, orgAlias?: string) {
     let command;
     if (orgAlias) {
         command = `sfdx data:query --query "${query}" --target-org "${orgAlias}" --result-format csv --use-tooling-api > ${outputCsv}`;
@@ -194,7 +199,7 @@ function queryMetadata(query: string, outputCsv: string, orgAlias?: string, erro
         const csvData = fs.readFileSync(outputCsv, 'utf8');
         return parse(csvData, { columns: true });
     } catch (error) {
-        handleQueryError(query, error, errors);
+        handleQueryError(query, error, []);
         return [];
     }
 }
@@ -245,7 +250,7 @@ async function pollTestRunResult(jobId: string, path: string, orgAlias?: string)
             status = 'Failed';
         }
         console.log(`Test Run Status: ${status}`);
-        await new Promise(resolve => setTimeout(resolve, path, 5000));
+        await new Promise(resolve => setTimeout(resolve, 5000));
     }
     console.log('Polling complete - Final Status:', status);
     return status;
@@ -254,11 +259,11 @@ async function pollTestRunResult(jobId: string, path: string, orgAlias?: string)
 function queryDataPoints(dataPoints: string[], orgSummaryDirectory: string, orgAlias?: string | undefined) {
     // QUERY TOOLING API DATAPOINTS
     const queryResults: Record<string, unknown[]> = {};
-    const errors = [];
+    const errors: any[] = [];
     for (const dataPoint of dataPoints) {
         try {
             const query = buildQuery(dataPoint);
-            const result = queryMetadata(query, (orgSummaryDirectory + '/' + dataPoint + '.csv'), orgAlias, errors);
+            const result = queryMetadata(query, (orgSummaryDirectory + '/' + dataPoint + '.csv'), orgAlias);
             queryResults[dataPoint] = result instanceof Array ? result : [];
         } catch (error) {
             // Errors are now handled in queryMetadata
@@ -293,7 +298,7 @@ async function getOrgWideApexCoverage(path: string, orgAlias?: string): Promise<
     try {
         const query = 'SELECT PercentCovered FROM ApexOrgWideCoverage';
         const results = await queryMetadata(query, path + '/orgWideApexCoverage.json', orgAlias);
-        const overallCoverage = results.reduce((sum, result) => sum + result.PercentCovered, 0) / results.length;
+        const overallCoverage = results.reduce((sum: any, result: { PercentCovered: any }) => sum + result.PercentCovered, 0) / results.length;
         return overallCoverage;
     } catch (error) {
         console.error('Error getting org-wide Apex coverage:', error.message);
@@ -385,4 +390,57 @@ function calculateCodeLines(): object {
         LightningComponentBundle: countCodeLines('./force-app/main/default/lwc', '.js', 'javascript'),
         StaticResource: countCodeLines('./force-app/main/default/lwc', '.js', 'javascript')
     };
+}
+
+interface FlowCoverageResult {
+    status: number;
+    result: {
+        done: boolean;
+        totalSize: number;
+        records: Array<{
+            type: string;
+            url: string;
+            Id: string;
+            ApexTestClassId: string;
+            TestMethodName: string;
+            FlowVersionId: string;
+            NumElementsCovered: number;
+            NumElementsNotCovered: number;
+        }>;
+    };
+}
+
+interface Record {
+    attributes: {
+        type: string;
+        url: string;
+    };
+    CreatedBy: {
+        attributes: {
+            type: string;
+            url: string;
+        };
+        Name: string;
+    };
+    CreatedDate: string;
+    Id: string;
+    LastModifiedBy: {
+        attributes: {
+            type: string;
+            url: string;
+        };
+        Name: string;
+    };
+    LastModifiedDate: string;
+}
+
+interface DataComponent<T> {
+    records: T[];
+    totalSize: number;
+    done: boolean;
+}
+
+interface CommandResponse<T> {
+    status: number;
+    result: DataComponent<T>;
 }
