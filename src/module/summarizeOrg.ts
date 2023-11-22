@@ -122,7 +122,13 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
         console.log('Summary:', summary);
         return summary;
     }
-    return undefined;
+    return {
+        SummaryDate: currentDate,
+        'ResultState': 'Failure',
+        OrgId: orgId,
+        Username: username,
+        OrgInstanceURL: instanceURL,
+    };
 }
 
 function calculateComponentSummary(dataPoints: string[], queryResults: Record<string, unknown[]>): Record<string, unknown> {
@@ -310,7 +316,13 @@ function retrieveStaticResources(orgAlias?: string): string[] {
     return retrievedFiles;
 }
 
-function calculateCodeLines(): object {
+function calculateCodeLines(): {
+    ApexClass: { Total: number; Comments: number; Code: number };
+    ApexTrigger: { Total: number; Comments: number; Code: number };
+    AuraDefinitionBundle: { Total: number; Comments: number; Code: number };
+    LightningComponentBundle: { Total: number; Comments: number; Code: number };
+    StaticResource: { Total: number; Comments: number; Code: number };
+} {
     return {
         ApexClass: countCodeLines('./force-app/main/default/classes', '.cls', 'apex'),
         ApexTrigger: countCodeLines('./force-app/main/default/triggers', '.trigger', 'apex'),
@@ -342,15 +354,4 @@ interface Record {
         Name: string;
     };
     LastModifiedDate: string;
-}
-
-interface DataComponent<T> {
-    records: T[];
-    totalSize: number;
-    done: boolean;
-}
-
-interface CommandResponse<T> {
-    status: number;
-    result: DataComponent<T>;
 }
