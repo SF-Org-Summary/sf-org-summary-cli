@@ -18,7 +18,7 @@
 import { execSync } from 'node:child_process';
 import fs = require('fs');
 import parse = require('csv-parse/lib/sync');
-import { summary } from '../models/summary';
+import { ComponentSummary, summary } from '../models/summary';
 import { countCodeLines } from '../libs/CountCodeLines';
 import { calculateFlowCoverage, calculateFlowOrgWideCoverage } from '../libs/GetFlowCoverage';
 
@@ -130,9 +130,8 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
         OrgInstanceURL: instanceURL,
     };
 }
-
-function calculateComponentSummary(dataPoints: string[], queryResults: Record<string, unknown[]>): Record<string, unknown> {
-    const componentSummary: Record<string, unknown> = {};
+function calculateComponentSummary(dataPoints: string[], queryResults: { [key: string]: QueryResult[] }): { [key: string]: ComponentSummary } {
+    const componentSummary: { [key: string]: ComponentSummary } = {};
     for (const dataPoint of dataPoints) {
         const key = dataPoint;
         if (queryResults[dataPoint]) {
@@ -233,7 +232,7 @@ async function pollTestRunResult(jobId: string, path: string, orgAlias?: string)
 
 function queryDataPoints(dataPoints: string[], orgSummaryDirectory: string, orgAlias?: string | undefined) {
     // QUERY TOOLING API DATAPOINTS
-    const queryResults: Record<string, unknown[]> = {};
+    const queryResults: { [key: string]: QueryResult[] } = {};
     const errors: any[] = [];
     for (const dataPoint of dataPoints) {
         try {
@@ -332,7 +331,7 @@ function calculateCodeLines(): {
     };
 }
 
-interface Record {
+interface QueryResult {
     attributes: {
         type: string;
         url: string;
