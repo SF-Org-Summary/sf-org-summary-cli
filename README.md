@@ -1,8 +1,7 @@
 # SF Org Summary
 
 ## Overview
-
- SF Org Summary is a Salesforce CLI plugin designed to provide a comprehensive summary of various data points within your Salesforce Org instance(s). It allows you to quickly gather essential information, including Apex test results, and key metadata, aiding in the analysis and understanding of your Salesforce environment.
+SF Org Summary is a Salesforce CLI plugin designed to provide a comprehensive summary of various data points within your Salesforce Org instance(s). It allows you to quickly gather essential information including key metatdata, Apex test results, code line counters and thereby aiding in the analysis and understanding of your Salesforce environment. 
 
 ## Features
 
