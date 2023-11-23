@@ -5,15 +5,25 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-shadow */
-import { execSync } from 'child_process';
+/* eslint-disable @typescript-eslint/member-ordering */
+/* eslint-disable sf-plugin/no-hardcoded-messages-flags */
+/* eslint-disable @typescript-eslint/require-await */
+/* eslint-disable class-methods-use-this */
+/* eslint-disable @typescript-eslint/no-floating-promises */
+/* eslint-disable @typescript-eslint/array-type */
+/* eslint-disable @typescript-eslint/restrict-plus-operands */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable no-await-in-loop */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+import { execSync } from 'node:child_process';
 import fs = require('fs');
 import parse = require('csv-parse/lib/sync');
-import { summary } from '../models/summary';
-import { GetFlowCoverage } from '../libs/GetFlowCoverage';
+import { ComponentSummary, summary } from '../models/summary';
+import { countCodeLines } from '../libs/CountCodeLines';
+import { calculateFlowCoverage, calculateFlowOrgWideCoverage } from '../libs/GetFlowCoverage';
 
 export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests: boolean = false): summary {
 
-    console.log('dataPoints', dataPoints);
     // PREP
     const timestamp = Date.now().toString();
     const currentDate = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
@@ -42,11 +52,11 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
     process.chdir(orgSummaryDirectory);
     execSync('sfdx force:project:create -x -n tempSFDXProject');
     process.chdir('./tempSFDXProject');
-    const apexClasses = retrieveApexClasses(orgAlias);
-    const apexTriggers = retrieveApexTriggers(orgAlias);
-    const auraComponents = retrieveAuraComponents(orgAlias);
-    const lwcMetadata = retrieveLWCMetadata(orgAlias);
-    const staticResources = retrieveStaticResources(orgAlias);
+    retrieveApexClasses(orgAlias);
+    retrieveApexTriggers(orgAlias);
+    retrieveAuraComponents(orgAlias);
+    retrieveLWCMetadata(orgAlias);
+    retrieveStaticResources(orgAlias);
     const codeLines = calculateCodeLines();
     process.chdir('../../../../');
 
@@ -67,8 +77,6 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
                         .then(testResult => {
                             getOrgWideApexCoverage(orgSummaryDirectory, orgAlias)
                                 .then(orgWideApexCoverage => {
-                                    const flowCoverage = getFlowCoverage(orgAlias);
-
                                     const ResultState = errors.length > 0 ? 'Completed' : 'Failure';
                                     if (ResultState === 'Failure') {
                                         process.exitCode = 1;
@@ -81,15 +89,15 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
                                         OrgInstanceURL: instanceURL,
                                         Components: calculateComponentSummary(dataPoints, queryResults),
                                         Tests: {
-                                            ApexUnitTests: testResult?.methodsCompleted || 0,
-                                            TestDuration: testResult?.runtime.toString() || 'N/A',
-                                            TestMethodsCompleted: testResult?.methodsCompleted || 0,
-                                            TestMethodsFailed: testResult?.methodsFailed || 0,
-                                            TestOutcome: testResult?.outcome || 'N/A',
-                                            OrgWideApexCoverage: orgWideApexCoverage || 0,
-                                            OrgWideFlowCoverage: calculateFlowOrgWideCoverage(flowCoverage)
+                                            ApexUnitTests: testResult?.methodsCompleted ?? 0,
+                                            TestDuration: testResult?.runtime.toString() ?? 'N/A',
+                                            TestMethodsCompleted: testResult?.methodsCompleted ?? 0,
+                                            TestMethodsFailed: testResult?.methodsFailed ?? 0,
+                                            TestOutcome: testResult?.outcome ?? 'N/A',
+                                            OrgWideApexCoverage: orgWideApexCoverage ?? 0,
+                                            OrgWideFlowCoverage: calculateFlowOrgWideCoverage(calculateFlowCoverage(orgAlias)) ?? 0
                                         },
-                                        'LinesOfCode': codeLines,
+                                        LinesOfCode: codeLines,
                                     };
                                     console.log('Summary:', summary);
                                     return summary;
@@ -109,38 +117,21 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
             Username: username,
             OrgInstanceURL: instanceURL,
             Components: calculateComponentSummary(dataPoints, queryResults),
-            'LinesOfCode': codeLines,
+            LinesOfCode: codeLines,
         };
         console.log('Summary:', summary);
         return summary;
     }
+    return {
+        SummaryDate: currentDate,
+        'ResultState': 'Failure',
+        OrgId: orgId,
+        Username: username,
+        OrgInstanceURL: instanceURL,
+    };
 }
-
-function calculateFlowOrgWideCoverage(flowCoverage: Record<string, number>[]): number {
-    if (flowCoverage.length === 0) {
-        return 0;
-    }
-    const totalCoverage = flowCoverage.reduce((sum, coverage) => sum + coverage, 0);
-    return totalCoverage / flowCoverage.length;
-}
-
-function getFlowCoverage(username: string): Record<string, number>[] {
-    const flowCoverage = [];
-    try {
-        const flowCoverageResults = new GetFlowCoverage().getFlowCoverage(username);
-        for (const record of flowCoverageResults.result.records) {
-            const coveragePercentage =
-                (record.NumElementsCovered / (record.NumElementsCovered + record.NumElementsNotCovered)) * 100;
-            flowCoverage.push(coveragePercentage);
-        }
-    } catch (error) {
-        console.error('Error getting flow coverage:', error.message);
-    }
-    return flowCoverage;
-}
-
-function calculateComponentSummary(dataPoints: string[], queryResults: Record<string, unknown[]>): Record<string, unknown> {
-    const componentSummary: Record<string, unknown> = {};
+function calculateComponentSummary(dataPoints: string[], queryResults: { [key: string]: QueryResult[] }): { [key: string]: ComponentSummary } {
+    const componentSummary: { [key: string]: ComponentSummary } = {};
     for (const dataPoint of dataPoints) {
         const key = dataPoint;
         if (queryResults[dataPoint]) {
@@ -170,7 +161,7 @@ function buildQuery(dataPoint: string): string {
     return `SELECT CreatedBy.Name, CreatedDate, Id, LastModifiedBy.Name, LastModifiedDate FROM ${dataPoint} ORDER BY LastModifiedDate DESC`;
 }
 
-function queryMetadata(query: string, outputCsv: string, orgAlias?: string, errors: any[]) {
+function queryMetadata(query: string, outputCsv: string, orgAlias?: string) {
     let command;
     if (orgAlias) {
         command = `sfdx data:query --query "${query}" --target-org "${orgAlias}" --result-format csv --use-tooling-api > ${outputCsv}`;
@@ -182,14 +173,14 @@ function queryMetadata(query: string, outputCsv: string, orgAlias?: string, erro
         const csvData = fs.readFileSync(outputCsv, 'utf8');
         return parse(csvData, { columns: true });
     } catch (error) {
-        handleQueryError(query, error, errors);
+        handleQueryError(query, error, []);
         return [];
     }
 }
 
 function handleQueryError(dataPoint: string, error: any, errors: any[]) {
     // Handle errors related to unsupported sObject types
-    if (error.stderr.includes("sObject type") && error.stderr.includes("is not supported")) {
+    if (error.stderr.includes('sObject type') && error.stderr.includes('is not supported')) {
         console.error(`Query for '${dataPoint}' is not supported. Defaulting to 'N/A' in the summary.`);
         errors.push(null); // Push a null value to indicate a handled error
     } else {
@@ -233,20 +224,20 @@ async function pollTestRunResult(jobId: string, path: string, orgAlias?: string)
             status = 'Failed';
         }
         console.log(`Test Run Status: ${status}`);
-        await new Promise(resolve => setTimeout(resolve, path, 5000));
+        await new Promise(resolve => setTimeout(resolve, 5000));
     }
     console.log('Polling complete - Final Status:', status);
     return status;
 }
 
-function queryDataPoints(dataPoints: string[], orgSummaryDirectory, orgAlias?) {
+function queryDataPoints(dataPoints: string[], orgSummaryDirectory: string, orgAlias?: string | undefined) {
     // QUERY TOOLING API DATAPOINTS
-    const queryResults: Record<string, unknown[]> = {};
-    const errors = [];
+    const queryResults: { [key: string]: QueryResult[] } = {};
+    const errors: any[] = [];
     for (const dataPoint of dataPoints) {
         try {
             const query = buildQuery(dataPoint);
-            const result = queryMetadata(query, (orgSummaryDirectory + '/' + dataPoint + '.csv'), orgAlias, errors);
+            const result = queryMetadata(query, (orgSummaryDirectory + '/' + dataPoint + '.csv'), orgAlias);
             queryResults[dataPoint] = result instanceof Array ? result : [];
         } catch (error) {
             // Errors are now handled in queryMetadata
@@ -281,7 +272,7 @@ async function getOrgWideApexCoverage(path: string, orgAlias?: string): Promise<
     try {
         const query = 'SELECT PercentCovered FROM ApexOrgWideCoverage';
         const results = await queryMetadata(query, path + '/orgWideApexCoverage.json', orgAlias);
-        const overallCoverage = results.reduce((sum, result) => sum + result.PercentCovered, 0) / results.length;
+        const overallCoverage = results.reduce((sum: any, result: { PercentCovered: any }) => sum + result.PercentCovered, 0) / results.length;
         return overallCoverage;
     } catch (error) {
         console.error('Error getting org-wide Apex coverage:', error.message);
@@ -324,48 +315,13 @@ function retrieveStaticResources(orgAlias?: string): string[] {
     return retrievedFiles;
 }
 
-function countCodeLines(directory: string, extension: string, language: 'apex' | 'javascript'): { Total: number; Comments: number; Code: number } {
-    const codeFiles = getAllFiles(directory, extension);
-    let commentLines = 0;
-    let totalLines = 0;
-
-    codeFiles.forEach(filePath => {
-        const fileContent = fs.readFileSync(filePath, 'utf8');
-        let comments;
-        if (language === 'apex') {
-            comments = fileContent.match(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g) || [];
-        } else if (language === 'javascript') {
-            comments = fileContent.match(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g) || [];
-        }
-        const total = fileContent.split('\n').filter(line => line.trim() !== '').length;
-        commentLines += comments.length;
-        totalLines += total;
-    });
-
-    return {
-        Total: totalLines,
-        Comments: commentLines,
-        Code: totalLines - commentLines
-    };
-}
-
-function getAllFiles(directory: string, extension: string): string[] {
-    const files: string[] = [];
-    const dirents = fs.readdirSync(directory, { withFileTypes: true });
-
-    for (const dirent of dirents) {
-        const fullPath = `${directory}/${dirent.name}`;
-        if (dirent.isDirectory()) {
-            files.push(...getAllFiles(fullPath, extension));
-        } else if (dirent.isFile() && dirent.name.endsWith(extension)) {
-            files.push(fullPath);
-        }
-    }
-
-    return files;
-}
-
-function calculateCodeLines(): object {
+function calculateCodeLines(): {
+    ApexClass: { Total: number; Comments: number; Code: number };
+    ApexTrigger: { Total: number; Comments: number; Code: number };
+    AuraDefinitionBundle: { Total: number; Comments: number; Code: number };
+    LightningComponentBundle: { Total: number; Comments: number; Code: number };
+    StaticResource: { Total: number; Comments: number; Code: number };
+} {
     return {
         ApexClass: countCodeLines('./force-app/main/default/classes', '.cls', 'apex'),
         ApexTrigger: countCodeLines('./force-app/main/default/triggers', '.trigger', 'apex'),
@@ -373,4 +329,28 @@ function calculateCodeLines(): object {
         LightningComponentBundle: countCodeLines('./force-app/main/default/lwc', '.js', 'javascript'),
         StaticResource: countCodeLines('./force-app/main/default/lwc', '.js', 'javascript')
     };
+}
+
+interface QueryResult {
+    attributes: {
+        type: string;
+        url: string;
+    };
+    CreatedBy: {
+        attributes: {
+            type: string;
+            url: string;
+        };
+        Name: string;
+    };
+    CreatedDate: string;
+    Id: string;
+    LastModifiedBy: {
+        attributes: {
+            type: string;
+            url: string;
+        };
+        Name: string;
+    };
+    LastModifiedDate: string;
 }
