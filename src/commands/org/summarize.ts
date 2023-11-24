@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/member-ordering */
-/* eslint-disable sf-plugin/no-hardcoded-messages-flags */
 /* eslint-disable @typescript-eslint/require-await */
 /* eslint-disable class-methods-use-this */
 /* eslint-disable @typescript-eslint/no-floating-promises */
@@ -27,20 +26,20 @@ export default class Summarize extends SfCommand<summary> {
 
   public static readonly flags = {
     targetusername: Flags.string({
-      summary: messages.getMessage('flags.name.summary'),
-      description: messages.getMessage('flags.name.description'),
+      summary: messages.getMessage('flags.targetusername.summary'),
+      description: messages.getMessage('flags.targetusername.description'),
       char: 'u',
       required: false,
     }),
     notests: Flags.boolean({
-      summary: messages.getMessage('flags.name.summary'),
-      description: messages.getMessage('flags.name.description'),
+      summary: messages.getMessage('flags.notests.summary'),
+      description: messages.getMessage('flags.notests.description'),
       char: 't',
       required: false,
     }),
     datapoints: Flags.string({
-      summary: messages.getMessage('flags.name.summary'),
-      description: messages.getMessage('flags.name.description'),
+      summary: messages.getMessage('flags.datapoints.summary'),
+      description: messages.getMessage('flags.datapoints.description'),
       char: 'd',
       required: false,
     })

@@ -6,7 +6,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-shadow */
 /* eslint-disable @typescript-eslint/member-ordering */
-/* eslint-disable sf-plugin/no-hardcoded-messages-flags */
 /* eslint-disable @typescript-eslint/require-await */
 /* eslint-disable class-methods-use-this */
 /* eslint-disable @typescript-eslint/no-floating-promises */
@@ -17,6 +16,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { execSync } from 'node:child_process';
 import fs = require('fs');
+import * as fse from 'fs-extra';
 import parse = require('csv-parse/lib/sync');
 import { ComponentSummary, summary } from '../models/summary';
 import { countCodeLines } from '../libs/CountCodeLines';
@@ -52,12 +52,8 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
     process.chdir(orgSummaryDirectory);
     execSync('sfdx force:project:create -x -n tempSFDXProject');
     process.chdir('./tempSFDXProject');
-    retrieveApexClasses(orgAlias);
-    retrieveApexTriggers(orgAlias);
-    retrieveAuraComponents(orgAlias);
-    retrieveLWCMetadata(orgAlias);
-    retrieveStaticResources(orgAlias);
-    const codeLines = calculateCodeLines();
+
+    const codeLines = calculateCodeLines(orgAlias);
     process.chdir('../../../../');
 
     // QUERY TOOLING API DATAPOINTS
@@ -100,6 +96,7 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
                                         LinesOfCode: codeLines,
                                     };
                                     console.log('Summary:', summary);
+                                    finish(orgSummaryDirectory, summary);
                                     return summary;
                                 });
                         });
@@ -119,7 +116,7 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
             Components: calculateComponentSummary(dataPoints, queryResults),
             LinesOfCode: codeLines,
         };
-        console.log('Summary:', summary);
+        finish(orgSummaryDirectory, summary);
         return summary;
     }
     return {
@@ -187,6 +184,34 @@ function handleQueryError(dataPoint: string, error: any, errors: any[]) {
         console.error(`Error executing query for '${dataPoint}': ${error.message}`);
         errors.push(error);
     }
+}
+
+function finish(orgSummaryDirectory: string, summarizedOrg: summary) {
+    const cleanUpDirectory = () => {
+        console.log(`Cleaning up files in directory: ${orgSummaryDirectory}`);
+
+        // Use fs.readdirSync to get an array of all file and directory names
+        const files = fs.readdirSync(orgSummaryDirectory);
+
+        // Iterate through the files and remove them
+        for (const file of files) {
+            const filePath = `${orgSummaryDirectory}/${file}`;
+            if (fs.statSync(filePath).isFile()) {
+                fs.unlinkSync(filePath); // Remove the file
+            } else {
+                fse.removeSync(filePath); // Remove subdirectories
+            }
+        }
+    };
+
+    const saveSummaryAsJson = (summaryData: summary) => {
+        const jsonFilePath = `${orgSummaryDirectory}/summary.json`;
+        fs.writeFileSync(jsonFilePath, JSON.stringify(summaryData, null, 2), 'utf8');
+        console.log(`Summary saved as JSON: ${jsonFilePath}`);
+    };
+
+    cleanUpDirectory();
+    saveSummaryAsJson(summarizedOrg);
 }
 
 function extractTestRunId(jsonFilePath: string): string | null {
@@ -280,48 +305,16 @@ async function getOrgWideApexCoverage(path: string, orgAlias?: string): Promise<
     }
 }
 
-function retrieveApexClasses(orgAlias?: string): string[] {
-    const retrieveCommand = `sf project retrieve start --metadata ApexClass --target-org ${orgAlias}`;
-    execSync(retrieveCommand, { encoding: 'utf8' });
-    const retrievedFiles = fs.readdirSync('./force-app/main/default/classes');
-    return retrievedFiles;
-}
-
-function retrieveApexTriggers(orgAlias?: string): string[] {
-    const retrieveCommand = `sf project retrieve start --metadata ApexTrigger --target-org ${orgAlias}`;
-    execSync(retrieveCommand, { encoding: 'utf8' });
-    const retrievedFiles = fs.readdirSync('./force-app/main/default/triggers');
-    return retrievedFiles;
-}
-
-function retrieveAuraComponents(orgAlias?: string): string[] {
-    const retrieveCommand = `sf project retrieve start --metadata AuraDefinitionBundle --target-org ${orgAlias}`;
-    execSync(retrieveCommand, { encoding: 'utf8' });
-    const retrievedFiles = fs.readdirSync('./force-app/main/default/aura');
-    return retrievedFiles;
-}
-
-function retrieveLWCMetadata(orgAlias?: string): string[] {
-    const retrieveCommand = `sf project retrieve start --metadata LightningComponentBundle --target-org ${orgAlias}`;
-    execSync(retrieveCommand, { encoding: 'utf8' });
-    const retrievedFiles = fs.readdirSync('./force-app/main/default/lwc');
-    return retrievedFiles;
-}
-
-function retrieveStaticResources(orgAlias?: string): string[] {
-    const retrieveCommand = `sf project retrieve start --metadata StaticResource --target-org ${orgAlias}`;
-    execSync(retrieveCommand, { encoding: 'utf8' });
-    const retrievedFiles = fs.readdirSync('./force-app/main/default/staticresources');
-    return retrievedFiles;
-}
-
-function calculateCodeLines(): {
+function calculateCodeLines(orgAlias?: string): {
     ApexClass: { Total: number; Comments: number; Code: number };
     ApexTrigger: { Total: number; Comments: number; Code: number };
     AuraDefinitionBundle: { Total: number; Comments: number; Code: number };
     LightningComponentBundle: { Total: number; Comments: number; Code: number };
     StaticResource: { Total: number; Comments: number; Code: number };
 } {
+    const retrieveCommand = orgAlias ? `sf project retrieve start --metadata ApexClass ApexTrigger AuraDefinitionBundle LightningComponentBundle StaticResource --target-org ${orgAlias}` :
+        'sf project retrieve start --metadata ApexClass ApexTrigger AuraDefinitionBundle LightningComponentBundle StaticResource';
+    execSync(retrieveCommand, { encoding: 'utf8' });
     return {
         ApexClass: countCodeLines('./force-app/main/default/classes', '.cls', 'apex'),
         ApexTrigger: countCodeLines('./force-app/main/default/triggers', '.trigger', 'apex'),
