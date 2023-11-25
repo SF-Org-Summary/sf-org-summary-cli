@@ -18,7 +18,7 @@
 
 import fs = require('fs');
 
-export function countCodeLines(directory: string, extension: string, language: 'apex' | 'javascript'): { Total: number; Comments: number; Code: number } {
+export function countCodeLines(directory: string, extension: string, language: 'apex' | 'javascript'): { Lang: string; Total: number; Comments: number; Code: number } {
   const codeFiles = getAllFiles(directory, extension);
   let commentLines = 0;
   let totalLines = 0;
@@ -37,6 +37,7 @@ export function countCodeLines(directory: string, extension: string, language: '
   });
 
   return {
+    Lang: language[0].toUpperCase() + language.substring(1).toLowerCase(),
     Total: totalLines,
     Comments: commentLines,
     Code: totalLines - commentLines

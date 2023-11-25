@@ -42,6 +42,18 @@ export default class Summarize extends SfCommand<summary> {
       char: 's',
       required: false,
     }),
+    nolimits: Flags.boolean({
+      summary: messages.getMessage('flags.nolimits.summary'),
+      description: messages.getMessage('flags.nolimits.description'),
+      char: 'l',
+      required: false,
+    }),
+    nocodelines: Flags.boolean({
+      summary: messages.getMessage('flags.nocodelines.summary'),
+      description: messages.getMessage('flags.nocodelines.description'),
+      char: 'c',
+      required: false,
+    }),
     targetusername: Flags.string({
       summary: messages.getMessage('flags.targetusername.summary'),
       description: messages.getMessage('flags.targetusername.description'),
