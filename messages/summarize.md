@@ -30,6 +30,14 @@ Description of datapoints flag.
 
 More information about datapoints flag. Don't repeat the summary. 
 
+# flags.keepdata.summary
+
+Description of datapoints flag.
+
+# flags.keepdata.description
+
+More information about datapoints flag. Don't repeat the summary. 
+
 # examples
 
 - <%= config.bin %> <%= command.id %>

@@ -11,7 +11,6 @@ import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
 import { summarizeOrg } from '../../module/summarizeOrg';
 import { summary } from '../../models/summary'
-import { dataPoints } from '../../data/DataPoints';
 
 Messages.importMessagesDirectory(__dirname);
 const messages = Messages.loadMessages('sf-org-summary', 'summarize');
@@ -25,38 +24,35 @@ export default class Summarize extends SfCommand<summary> {
   protected static supportsUsername = true;
 
   public static readonly flags = {
-    targetusername: Flags.string({
-      summary: messages.getMessage('flags.targetusername.summary'),
-      description: messages.getMessage('flags.targetusername.description'),
-      char: 'u',
+    datapoints: Flags.string({
+      summary: messages.getMessage('flags.datapoints.summary'),
+      description: messages.getMessage('flags.datapoints.description'),
+      char: 'd',
+      required: false,
+    }),
+    keepdata: Flags.boolean({
+      summary: messages.getMessage('flags.keepdata.summary'),
+      description: messages.getMessage('flags.keepdata.description'),
+      char: 'k',
       required: false,
     }),
     notests: Flags.boolean({
       summary: messages.getMessage('flags.notests.summary'),
       description: messages.getMessage('flags.notests.description'),
-      char: 't',
+      char: 's',
       required: false,
     }),
-    datapoints: Flags.string({
-      summary: messages.getMessage('flags.datapoints.summary'),
-      description: messages.getMessage('flags.datapoints.description'),
-      char: 'd',
+    targetusername: Flags.string({
+      summary: messages.getMessage('flags.targetusername.summary'),
+      description: messages.getMessage('flags.targetusername.description'),
+      char: 'u',
       required: false,
     })
   };
 
   public async run(): Promise<summary> {
     const { flags } = await this.parse(Summarize);
-
-    const selectedDataPoints = flags.datapoints ? (flags.datapoints).split(',') : dataPoints;
-
-    if (flags.targetusername && flags.notests) {
-      return summarizeOrg(selectedDataPoints, flags.targetusername, flags.notests);
-    } else if (flags.targetusername) {
-      return summarizeOrg(selectedDataPoints, flags.targetusername);
-    } else {
-      return summarizeOrg(selectedDataPoints);
-    }
+    return summarizeOrg(flags)
   }
 
 }

@@ -21,9 +21,21 @@ import parse = require('csv-parse/lib/sync');
 import { ComponentSummary, summary } from '../models/summary';
 import { countCodeLines } from '../libs/CountCodeLines';
 import { calculateFlowCoverage, calculateFlowOrgWideCoverage } from '../libs/GetFlowCoverage';
+import { dataPoints } from '../data/DataPoints';
 
-export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests: boolean = false): summary {
+export interface flags {
+    datapoints?: string;
+    keepdata?: boolean;
+    notests?: boolean;
+    targetusername?: string;
+}
 
+export function summarizeOrg(flags: flags): summary {
+
+    const selectedDataPoints = flags.datapoints ? flags.datapoints.split(',') : dataPoints;
+    const orgAlias = flags.targetusername ? flags.targetusername : undefined;
+    const skipTests = flags.notests ? flags.notests : false;
+    const keepData = flags.keepdata ? flags.keepdata : false;
     // PREP
     const timestamp = Date.now().toString();
     const currentDate = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
@@ -57,7 +69,7 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
     process.chdir('../../../../');
 
     // QUERY TOOLING API DATAPOINTS
-    const { queryResults, errors } = queryDataPoints(dataPoints, orgSummaryDirectory, orgAlias);
+    const { queryResults, errors } = queryDataPoints(selectedDataPoints, orgSummaryDirectory, orgAlias);
 
     // RUN APEX TESTS
     if (!skipTests) {
@@ -83,7 +95,7 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
                                         OrgId: orgId,
                                         Username: username,
                                         OrgInstanceURL: instanceURL,
-                                        Components: calculateComponentSummary(dataPoints, queryResults),
+                                        Components: calculateComponentSummary(selectedDataPoints, queryResults),
                                         Tests: {
                                             ApexUnitTests: testResult?.methodsCompleted ?? 0,
                                             TestDuration: testResult?.runtime.toString() ?? 'N/A',
@@ -96,7 +108,7 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
                                         LinesOfCode: codeLines,
                                     };
                                     console.log('Summary:', summary);
-                                    finish(orgSummaryDirectory, summary);
+                                    finish(orgSummaryDirectory, summary, keepData);
                                     return summary;
                                 });
                         });
@@ -113,10 +125,10 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
             OrgId: orgId,
             Username: username,
             OrgInstanceURL: instanceURL,
-            Components: calculateComponentSummary(dataPoints, queryResults),
+            Components: calculateComponentSummary(selectedDataPoints, queryResults),
             LinesOfCode: codeLines,
         };
-        finish(orgSummaryDirectory, summary);
+        finish(orgSummaryDirectory, summary, keepData);
         return summary;
     }
     return {
@@ -127,9 +139,9 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
         OrgInstanceURL: instanceURL,
     };
 }
-function calculateComponentSummary(dataPoints: string[], queryResults: { [key: string]: QueryResult[] }): { [key: string]: ComponentSummary } {
+function calculateComponentSummary(selectedDataPoints: string[], queryResults: { [key: string]: QueryResult[] }): { [key: string]: ComponentSummary } {
     const componentSummary: { [key: string]: ComponentSummary } = {};
-    for (const dataPoint of dataPoints) {
+    for (const dataPoint of selectedDataPoints) {
         const key = dataPoint;
         if (queryResults[dataPoint]) {
             const results = queryResults[dataPoint];
@@ -186,31 +198,27 @@ function handleQueryError(dataPoint: string, error: any, errors: any[]) {
     }
 }
 
-function finish(orgSummaryDirectory: string, summarizedOrg: summary) {
-    const cleanUpDirectory = () => {
-        console.log(`Cleaning up files in directory: ${orgSummaryDirectory}`);
-
-        // Use fs.readdirSync to get an array of all file and directory names
-        const files = fs.readdirSync(orgSummaryDirectory);
-
-        // Iterate through the files and remove them
-        for (const file of files) {
-            const filePath = `${orgSummaryDirectory}/${file}`;
-            if (fs.statSync(filePath).isFile()) {
-                fs.unlinkSync(filePath); // Remove the file
-            } else {
-                fse.removeSync(filePath); // Remove subdirectories
+function finish(orgSummaryDirectory: string, summarizedOrg: summary, keepData: boolean) {
+    if (!keepData) {
+        const cleanUpDirectory = () => {
+            console.log(`Cleaning up files in directory: ${orgSummaryDirectory}`);
+            const files = fs.readdirSync(orgSummaryDirectory);
+            for (const file of files) {
+                const filePath = `${orgSummaryDirectory}/${file}`;
+                if (fs.statSync(filePath).isFile()) {
+                    fs.unlinkSync(filePath); // Remove the file
+                } else {
+                    fse.removeSync(filePath); // Remove subdirectories
+                }
             }
-        }
-    };
-
+        };
+        cleanUpDirectory();
+    }
     const saveSummaryAsJson = (summaryData: summary) => {
-        const jsonFilePath = `${orgSummaryDirectory}/summary.json`;
+        const jsonFilePath = `${orgSummaryDirectory}/orgsummary.json`;
         fs.writeFileSync(jsonFilePath, JSON.stringify(summaryData, null, 2), 'utf8');
         console.log(`Summary saved as JSON: ${jsonFilePath}`);
     };
-
-    cleanUpDirectory();
     saveSummaryAsJson(summarizedOrg);
 }
 
@@ -255,11 +263,11 @@ async function pollTestRunResult(jobId: string, path: string, orgAlias?: string)
     return status;
 }
 
-function queryDataPoints(dataPoints: string[], orgSummaryDirectory: string, orgAlias?: string | undefined) {
+function queryDataPoints(selectedDataPoints: string[], orgSummaryDirectory: string, orgAlias?: string | undefined) {
     // QUERY TOOLING API DATAPOINTS
     const queryResults: { [key: string]: QueryResult[] } = {};
     const errors: any[] = [];
-    for (const dataPoint of dataPoints) {
+    for (const dataPoint of selectedDataPoints) {
         try {
             const query = buildQuery(dataPoint);
             const result = queryMetadata(query, (orgSummaryDirectory + '/' + dataPoint + '.csv'), orgAlias);
