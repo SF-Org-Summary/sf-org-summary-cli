@@ -34,13 +34,6 @@ export interface flags {
     targetusername?: string;
 }
 
-interface OrgInfo {
-    instanceUrl: string;
-    username: string;
-    id: string;
-    accessToken: string;
-}
-
 export function buildOrgSummary(
     timestamp: string,
     currentDate: string,
@@ -75,6 +68,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     const noTests = flags.notests ? flags.notests : false;
     const noLinesOfCode = flags.nocodelines ? flags.nocodelines : false;
     const selectedDataPoints = flags.datapoints ? flags.datapoints.split(',') : dataPoints;
+    const errors = [];
 
     // Prepare directories
     const dataDirectory = './orgsummary';
@@ -150,10 +144,11 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
         }
     }
 
+    baseSummary.ResultState = errors.length > 0 ? 'Failure' : 'Completed';
     const summary: OrgSummary = {
         ...baseSummary
     };
-    console.log('Summary:', summary);
+    console.log('Final Summary:', summary);
     finish(orgSummaryDirectory, summary, keepData);
     return summary;
 }
@@ -175,6 +170,7 @@ async function checkLimits(instanceURL: string, accessToken: string) {
         for (const key in limitsData) {
             if (limitsData.hasOwnProperty(key)) {
                 const limitInfo = limitsData[key];
+                const description = `Description for ${key}`;
 
                 // Check if the limit has Max and Remaining properties
                 if (limitInfo && limitInfo.Max !== undefined && limitInfo.Remaining !== undefined) {
@@ -182,7 +178,7 @@ async function checkLimits(instanceURL: string, accessToken: string) {
                         Max: limitInfo.Max,
                         Remaining: limitInfo.Remaining,
                         Usage: limitInfo.Max - limitInfo.Remaining,
-                        Description: `Description for ${key}`, // Replace with actual description
+                        Description: description,
                     };
                 } else {
                     // Handle the case where Max or Remaining is undefined

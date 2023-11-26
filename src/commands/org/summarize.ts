@@ -10,12 +10,12 @@
 import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
 import { summarizeOrg } from '../../module/summarizeOrg';
-import { summary } from '../../models/summary'
+import { OrgSummary } from '../../models/summary'
 
 Messages.importMessagesDirectory(__dirname);
 const messages = Messages.loadMessages('sf-org-summary', 'summarize');
 
-export default class Summarize extends SfCommand<summary> {
+export default class Summarize extends SfCommand<OrgSummary> {
   public static readonly summary = messages.getMessage('summary');
   public static readonly description = messages.getMessage('description');
   public static readonly examples = messages.getMessages('examples');
@@ -62,7 +62,7 @@ export default class Summarize extends SfCommand<summary> {
     })
   };
 
-  public async run(): Promise<summary> {
+  public async run(): Promise<OrgSummary> {
     const { flags } = await this.parse(Summarize);
     return summarizeOrg(flags)
   }
