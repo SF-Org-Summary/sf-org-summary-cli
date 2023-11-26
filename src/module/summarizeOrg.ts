@@ -263,15 +263,18 @@ function queryMetadata(query: string, outputCsv: string, orgAlias?: string) {
 }
 
 function handleQueryError(dataPoint: string, error: any, errors: any[]) {
-    // Handle errors related to unsupported sObject types
-    if (error.stderr.includes('sObject type') && error.stderr.includes('is not supported')) {
+    const isUnsupportedTypeError = error.stderr.includes('sObject type') && error.stderr.includes('is not supported');
+    if (isUnsupportedTypeError) {
+        // Handle the specific unsupported sObject type error
         console.error(`Query for '${dataPoint}' is not supported. Defaulting to 'N/A' in the summary.`);
         errors.push(null); // Push a null value to indicate a handled error
     } else {
+        // Handle other errors
         console.error(`Error executing query for '${dataPoint}': ${error.message}`);
         errors.push(error);
     }
 }
+
 
 function finish(orgSummaryDirectory: string, summarizedOrg: OrgSummary, keepData: boolean) {
     if (!keepData) {
@@ -341,13 +344,10 @@ function queryDataPoints(selectedDataPoints: string[], orgSummaryDirectory: stri
     // QUERY TOOLING API DATAPOINTS
     const queryResults: { [key: string]: QueryResult[] } = {};
     for (const dataPoint of selectedDataPoints) {
-        try {
-            const query = buildQuery(dataPoint);
-            const result = queryMetadata(query, (orgSummaryDirectory + '/' + dataPoint + '.csv'), orgAlias);
-            queryResults[dataPoint] = result instanceof Array ? result : [];
-        } catch (error) {
-            // Errors are now handled in queryMetadata
-        }
+        const query = buildQuery(dataPoint);
+        const result = queryMetadata(query, (orgSummaryDirectory + '/' + dataPoint + '.csv'), orgAlias);
+        queryResults[dataPoint] = result instanceof Array ? result : [];
+
     }
     return queryResults
 }
