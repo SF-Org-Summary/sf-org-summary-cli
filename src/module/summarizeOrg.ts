@@ -164,11 +164,11 @@ async function checkLimits(instanceURL: string, accessToken: string) {
         const limitsData = limitsApiResponse.data;
 
         // Initialize an empty object for limits
-        const limits = {};
+        const limits: { [key: string]: Limit } = {};
 
         // Iterate over keys in limitsData
         for (const key in limitsData) {
-            if (limitsData.hasOwnProperty(key)) {
+            if (Object.prototype.hasOwnProperty.call(limitsData, key)) {
                 const limitInfo = limitsData[key];
                 const description = `Description for ${key}`;
 

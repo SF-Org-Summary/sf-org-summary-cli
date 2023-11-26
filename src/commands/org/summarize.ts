@@ -39,7 +39,7 @@ export default class Summarize extends SfCommand<OrgSummary> {
     notests: Flags.boolean({
       summary: messages.getMessage('flags.notests.summary'),
       description: messages.getMessage('flags.notests.description'),
-      char: 's',
+      char: 't',
       required: false,
     }),
     nolimits: Flags.boolean({

@@ -18,6 +18,7 @@ export interface ComponentSummary {
 }
 
 export interface Limit {
+  Description: string;
   Max: number | 'N/A';
   Remaining: number | 'N/A';
   Usage: number | 'N/A';
