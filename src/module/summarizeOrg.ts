@@ -99,56 +99,69 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
 
     if (selectedDataPoints && selectedDataPoints.length > 0) {
         console.log(`Processing selected data points: ${selectedDataPoints.join(', ')}`);
-        const queryResults = queryDataPoints(
-            selectedDataPoints,
-            orgSummaryDirectory,
-            orgAlias
-        );
-        baseSummary.Components = calculateComponentSummary(
-            selectedDataPoints,
-            queryResults
-        );
-        console.log('Data points processed successfully.');
+        try {
+            const queryResults = queryDataPoints(selectedDataPoints, orgSummaryDirectory, orgAlias);
+            baseSummary.Components = calculateComponentSummary(selectedDataPoints, queryResults);
+            console.log('Data points processed successfully.');
+        } catch (error) {
+            console.error('Error processing selected data points:', error.message);
+            errors.push({ componentSummaryError: error.message });
+        }
     }
 
     if (!noLimits) {
         console.log('Checking Org limits...');
-        const limits = await checkLimits(info.instanceUrl, info.accessToken);
-        baseSummary.Limits = limits;
-        console.log('Org limits checked.');
+        try {
+            const limits = await checkLimits(info.instanceUrl, info.accessToken);
+            baseSummary.Limits = limits;
+            console.log('Org limits checked.');
+        } catch (error) {
+            console.error('Error checking org limits:', error.message);
+            errors.push({ checkLimitsError: error.message });
+        }
     }
 
     if (!noLinesOfCode) {
         console.log('Calculating lines of code...');
-        process.chdir(orgSummaryDirectory);
-        execSync('sfdx force:project:create -x -n tempSFDXProject');
-        process.chdir('./tempSFDXProject');
-        const codeLines = calculateCodeLines(orgAlias);
-        process.chdir('../../../../');
-        baseSummary.LinesOfCode = codeLines;
-        console.log('Lines of code calculated.');
+        try {
+            process.chdir(orgSummaryDirectory);
+            execSync('sfdx force:project:create -x -n tempSFDXProject');
+            process.chdir('./tempSFDXProject');
+            const codeLines = calculateCodeLines(orgAlias);
+            process.chdir('../../../../');
+            baseSummary.LinesOfCode = codeLines;
+            console.log('Lines of code calculated.');
+        } catch (error) {
+            console.error('Error calculating lines of code:', error.message);
+            errors.push({ calculateLinesOfCodeError: error.message });
+        }
     }
 
     if (!noTests) {
         console.log('Running Apex tests...');
-        const testResultsCommand = `sfdx force:apex:test:run --target-org "${orgAlias}" --test-level RunLocalTests --code-coverage --result-format json > ${orgSummaryDirectory}/testResults.json`;
-        execSync(testResultsCommand, { encoding: 'utf8' });
-        const testRunId = extractTestRunId(`${orgSummaryDirectory}/testResults.json`);
-        if (testRunId) {
-            console.log(`Checking Status of Job "${testRunId}"...`);
-            await pollTestRunResult(testRunId, orgSummaryDirectory, orgAlias);
-            const testResult = await getTestRunDetails(testRunId, orgSummaryDirectory, orgAlias);
-            const orgWideApexCoverage = await getOrgWideApexCoverage(orgSummaryDirectory, orgAlias);
-            baseSummary.Tests = {
-                ApexUnitTests: testResult?.methodsCompleted ?? 0,
-                TestDuration: testResult?.runtime.toString() ?? 'N/A',
-                TestMethodsCompleted: testResult?.methodsCompleted ?? 0,
-                TestMethodsFailed: testResult?.methodsFailed ?? 0,
-                TestOutcome: testResult?.outcome ?? 'N/A',
-                OrgWideApexCoverage: orgWideApexCoverage ?? 0,
-                OrgWideFlowCoverage: calculateFlowOrgWideCoverage(calculateFlowCoverage(orgAlias)) ?? 0,
-            };
-            console.log('Apex tests completed successfully.');
+        try {
+            const testResultsCommand = `sfdx force:apex:test:run --target-org "${orgAlias}" --test-level RunLocalTests --code-coverage --result-format json > ${orgSummaryDirectory}/testResults.json`;
+            execSync(testResultsCommand, { encoding: 'utf8' });
+            const testRunId = extractTestRunId(`${orgSummaryDirectory}/testResults.json`);
+            if (testRunId) {
+                console.log(`Checking Status of Job "${testRunId}"...`);
+                await pollTestRunResult(testRunId, orgSummaryDirectory, orgAlias);
+                const testResult = await getTestRunDetails(testRunId, orgSummaryDirectory, orgAlias);
+                const orgWideApexCoverage = await getOrgWideApexCoverage(orgSummaryDirectory, orgAlias);
+                baseSummary.Tests = {
+                    ApexUnitTests: testResult?.methodsCompleted ?? 0,
+                    TestDuration: testResult?.runtime.toString() ?? 'N/A',
+                    TestMethodsCompleted: testResult?.methodsCompleted ?? 0,
+                    TestMethodsFailed: testResult?.methodsFailed ?? 0,
+                    TestOutcome: testResult?.outcome ?? 'N/A',
+                    OrgWideApexCoverage: orgWideApexCoverage ?? 0,
+                    OrgWideFlowCoverage: calculateFlowOrgWideCoverage(calculateFlowCoverage(orgAlias)) ?? 0,
+                };
+                console.log('Apex tests completed successfully.');
+            }
+        } catch (error) {
+            console.error('Error running Apex tests:', error.message);
+            errors.push({ runApexTestsError: error.message });
         }
     }
 
@@ -268,9 +281,9 @@ function finish(orgSummaryDirectory: string, summarizedOrg: OrgSummary, keepData
             for (const file of files) {
                 const filePath = `${orgSummaryDirectory}/${file}`;
                 if (fs.statSync(filePath).isFile()) {
-                    fs.unlinkSync(filePath); // Remove the file
+                    fs.unlinkSync(filePath);
                 } else {
-                    fse.removeSync(filePath); // Remove subdirectories
+                    fse.removeSync(filePath);
                 }
             }
         };
@@ -321,7 +334,6 @@ async function pollTestRunResult(jobId: string, path: string, orgAlias?: string)
         console.log(`Test Run Status: ${status}`);
         await new Promise(resolve => setTimeout(resolve, 5000));
     }
-    console.log('Polling complete - Final Status:', status);
     return status;
 }
 

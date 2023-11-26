@@ -24,6 +24,12 @@ export default class Summarize extends SfCommand<OrgSummary> {
   protected static supportsUsername = true;
 
   public static readonly flags = {
+    nocodelines: Flags.boolean({
+      summary: messages.getMessage('flags.nocodelines.summary'),
+      description: messages.getMessage('flags.nocodelines.description'),
+      char: 'c',
+      required: false,
+    }),
     datapoints: Flags.string({
       summary: messages.getMessage('flags.datapoints.summary'),
       description: messages.getMessage('flags.datapoints.description'),
@@ -36,22 +42,16 @@ export default class Summarize extends SfCommand<OrgSummary> {
       char: 'k',
       required: false,
     }),
-    notests: Flags.boolean({
-      summary: messages.getMessage('flags.notests.summary'),
-      description: messages.getMessage('flags.notests.description'),
-      char: 't',
-      required: false,
-    }),
     nolimits: Flags.boolean({
       summary: messages.getMessage('flags.nolimits.summary'),
       description: messages.getMessage('flags.nolimits.description'),
       char: 'l',
       required: false,
     }),
-    nocodelines: Flags.boolean({
-      summary: messages.getMessage('flags.nocodelines.summary'),
-      description: messages.getMessage('flags.nocodelines.description'),
-      char: 'c',
+    notests: Flags.boolean({
+      summary: messages.getMessage('flags.notests.summary'),
+      description: messages.getMessage('flags.notests.description'),
+      char: 't',
       required: false,
     }),
     targetusername: Flags.string({
