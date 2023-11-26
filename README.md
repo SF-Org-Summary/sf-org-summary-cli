@@ -15,7 +15,7 @@ SF Org Summary is a Salesforce CLI plugin designed to provide a comprehensive su
 
 ## Installation
 
-Install the Salesforce Org Summary plugin seamlessly into your Salesforce CLI environment:
+Install the SF Org Summary plugin seamlessly into your Salesforce CLI environment:
 
 ```bash
 sfdx plugins:install sf-org-summary
