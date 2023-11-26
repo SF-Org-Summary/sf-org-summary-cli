@@ -1,18 +1,58 @@
 # summary
 
-Summary of a command.
+Get Org Summary 
 
 # description
 
-More information about a command. Don't repeat the summary. 
+Quickly gather essential information on Salesforce Org Instances including key metatdata, Apex test results, coverage- and code line calculations.
 
-# flags.name.summary
+# flags.targetusername.summary
 
-Description of a flag.
+Select Org
 
-# flags.name.description
+# flags.targetusername.description
 
-More information about a flag. Don't repeat the summary. 
+Select Org
+
+# flags.notests.summary
+
+Skip Apex Tests
+
+# flags.notests.description
+
+Skip Apex Tests
+
+# flags.datapoints.summary
+
+Set DataPoints To Query
+
+# flags.datapoints.description
+
+Set DataPoints To Query
+
+# flags.keepdata.summary
+
+Keep Data Files
+
+# flags.keepdata.description
+
+Keep Data Files
+
+# flags.nolimits.summary
+
+Keep Data Files
+
+# flags.nolimits.description
+
+Keep Data Files
+
+# flags.nocodelines.summary
+
+Keep Data Files
+
+# flags.nocodelines.description
+
+Keep Data Files
 
 # examples
 

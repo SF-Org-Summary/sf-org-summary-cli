@@ -1,3 +1,4 @@
+/* eslint-disable complexity */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable no-console */
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
@@ -6,7 +7,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-shadow */
 /* eslint-disable @typescript-eslint/member-ordering */
-/* eslint-disable sf-plugin/no-hardcoded-messages-flags */
 /* eslint-disable @typescript-eslint/require-await */
 /* eslint-disable class-methods-use-this */
 /* eslint-disable @typescript-eslint/no-floating-promises */
@@ -17,19 +17,67 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { execSync } from 'node:child_process';
 import fs = require('fs');
+import axios from 'axios';
+import * as fse from 'fs-extra';
 import parse = require('csv-parse/lib/sync');
-import { ComponentSummary, summary } from '../models/summary';
+import { ComponentSummary, Limit, OrgSummary } from '../models/summary';
 import { countCodeLines } from '../libs/CountCodeLines';
 import { calculateFlowCoverage, calculateFlowOrgWideCoverage } from '../libs/GetFlowCoverage';
+import { dataPoints } from '../data/DataPoints';
 
-export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests: boolean = false): summary {
+export interface flags {
+    datapoints?: string;
+    keepdata?: boolean;
+    nolimits?: boolean;
+    notests?: boolean;
+    nocodelines?: boolean;
+    targetusername?: string;
+}
 
-    // PREP
-    const timestamp = Date.now().toString();
+export function buildOrgSummary(
+    timestamp: string,
+    currentDate: string,
+    info: OrgInfo,
+    resultState: string,
+    limits?: { [key: string]: Limit }
+): OrgSummary {
+    const baseSummary: OrgSummary = {
+        Timestamp: timestamp,
+        SummaryDate: currentDate,
+        ResultState: resultState,
+        OrgId: info.orgId,
+        Username: info.username,
+        OrgInstanceURL: info.instanceUrl,
+    };
+
+    if (limits) {
+        baseSummary.Limits = limits;
+    }
+
+    return baseSummary;
+}
+
+export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
+
+    const orgAlias = flags.targetusername ?? undefined;
     const currentDate = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
+    const timestamp = Date.now().toString();
+    const info = getOrgInfo(orgAlias);
+    const keepData = flags.keepdata ? flags.keepdata : false;
+    const noLimits = flags.nolimits ? flags.nolimits : false;
+    const noTests = flags.notests ? flags.notests : false;
+    const noLinesOfCode = flags.nocodelines ? flags.nocodelines : false;
+    const selectedDataPoints = flags.datapoints ? flags.datapoints.split(',') : dataPoints;
+    const errors = [];
+
+    // Prepare directories
     const dataDirectory = './orgsummary';
     if (!fs.existsSync(dataDirectory)) {
         fs.mkdirSync(dataDirectory);
+    }
+    const orgSummaryDirectory = `./orgsummary/${info.orgId}/${timestamp}`;
+    if (!fs.existsSync(orgSummaryDirectory)) {
+        fs.mkdirSync(orgSummaryDirectory, { recursive: true });
     }
     let initialMessage;
     if (orgAlias) {
@@ -38,101 +86,137 @@ export function summarizeOrg(dataPoints: string[], orgAlias?: string, skipTests:
         initialMessage = 'No Org Alias provided, queries will be running on the set default Org';
     }
     console.log(initialMessage);
-    const orgIdCommand = `sfdx force:org:display --target-org "${orgAlias}" --json`;
-    const orgIdOutput = execSync(orgIdCommand, { encoding: 'utf8' });
-    const orgId = JSON.parse(orgIdOutput).result.id;
-    const instanceURL = JSON.parse(orgIdOutput).result.instanceUrl;
-    const username = JSON.parse(orgIdOutput).result.username;
-    const orgSummaryDirectory = `./orgsummary/${orgId}/${timestamp}`;
-    if (!fs.existsSync(orgSummaryDirectory)) {
-        fs.mkdirSync(orgSummaryDirectory, { recursive: true });
-    }
 
-    // CALCULATE LINES OF CODE
-    process.chdir(orgSummaryDirectory);
-    execSync('sfdx force:project:create -x -n tempSFDXProject');
-    process.chdir('./tempSFDXProject');
-    retrieveApexClasses(orgAlias);
-    retrieveApexTriggers(orgAlias);
-    retrieveAuraComponents(orgAlias);
-    retrieveLWCMetadata(orgAlias);
-    retrieveStaticResources(orgAlias);
-    const codeLines = calculateCodeLines();
-    process.chdir('../../../../');
-
-    // QUERY TOOLING API DATAPOINTS
-    const { queryResults, errors } = queryDataPoints(dataPoints, orgSummaryDirectory, orgAlias);
-
-    // RUN APEX TESTS
-    if (!skipTests) {
-        const testResultsCommand = `sfdx force:apex:test:run --target-org "${orgAlias}" --test-level RunLocalTests --code-coverage --result-format json > ${orgSummaryDirectory}/testResults.json`;
-        execSync(testResultsCommand, { encoding: 'utf8' });
-        const testRunId = extractTestRunId(`${orgSummaryDirectory}/testResults.json`);
-        console.log('testRunId', testRunId);
-        if (testRunId) {
-            console.log(`Checking Status of Job "${testRunId}"...`);
-            pollTestRunResult(testRunId, orgSummaryDirectory, orgAlias)
-                .then(() => {
-                    getTestRunDetails(testRunId, orgSummaryDirectory, orgAlias)
-                        .then(testResult => {
-                            getOrgWideApexCoverage(orgSummaryDirectory, orgAlias)
-                                .then(orgWideApexCoverage => {
-                                    const ResultState = errors.length > 0 ? 'Completed' : 'Failure';
-                                    if (ResultState === 'Failure') {
-                                        process.exitCode = 1;
-                                    }
-                                    const summary: summary = {
-                                        SummaryDate: currentDate,
-                                        ResultState,
-                                        OrgId: orgId,
-                                        Username: username,
-                                        OrgInstanceURL: instanceURL,
-                                        Components: calculateComponentSummary(dataPoints, queryResults),
-                                        Tests: {
-                                            ApexUnitTests: testResult?.methodsCompleted ?? 0,
-                                            TestDuration: testResult?.runtime.toString() ?? 'N/A',
-                                            TestMethodsCompleted: testResult?.methodsCompleted ?? 0,
-                                            TestMethodsFailed: testResult?.methodsFailed ?? 0,
-                                            TestOutcome: testResult?.outcome ?? 'N/A',
-                                            OrgWideApexCoverage: orgWideApexCoverage ?? 0,
-                                            OrgWideFlowCoverage: calculateFlowOrgWideCoverage(calculateFlowCoverage(orgAlias)) ?? 0
-                                        },
-                                        LinesOfCode: codeLines,
-                                    };
-                                    console.log('Summary:', summary);
-                                    return summary;
-                                });
-                        });
-                });
-        }
-    } else {
-        const ResultState = errors.length > 0 ? 'Completed' : 'Failure';
-        if (ResultState === 'Failure') {
-            process.exitCode = 1;
-        }
-        const summary: summary = {
-            SummaryDate: currentDate,
-            ResultState,
-            OrgId: orgId,
-            Username: username,
-            OrgInstanceURL: instanceURL,
-            Components: calculateComponentSummary(dataPoints, queryResults),
-            LinesOfCode: codeLines,
-        };
-        console.log('Summary:', summary);
-        return summary;
-    }
-    return {
+    const baseSummary: OrgSummary = {
+        Timestamp: timestamp,
         SummaryDate: currentDate,
-        'ResultState': 'Failure',
-        OrgId: orgId,
-        Username: username,
-        OrgInstanceURL: instanceURL,
+        ResultState: 'Pending', // Adjust as needed
+        OrgId: info.orgId,
+        Username: info.username,
+        OrgInstanceURL: info.instanceUrl,
     };
+    console.log('Base Summary:', baseSummary);
+
+    if (selectedDataPoints && selectedDataPoints.length > 0) {
+        console.log(`Processing selected data points: ${selectedDataPoints.join(', ')}`);
+        try {
+            const queryResults = queryDataPoints(selectedDataPoints, orgSummaryDirectory, orgAlias);
+            baseSummary.Components = calculateComponentSummary(selectedDataPoints, queryResults);
+            console.log('Data points processed successfully.');
+        } catch (error) {
+            console.error('Error processing selected data points:', error.message);
+            errors.push({ componentSummaryError: error.message });
+        }
+    }
+
+    if (!noLimits) {
+        console.log('Checking Org limits...');
+        try {
+            const limits = await checkLimits(info.instanceUrl, info.accessToken);
+            baseSummary.Limits = limits;
+            console.log('Org limits checked.');
+        } catch (error) {
+            console.error('Error checking org limits:', error.message);
+            errors.push({ checkLimitsError: error.message });
+        }
+    }
+
+    if (!noLinesOfCode) {
+        console.log('Calculating lines of code...');
+        try {
+            process.chdir(orgSummaryDirectory);
+            execSync('sfdx force:project:create -x -n tempSFDXProject');
+            process.chdir('./tempSFDXProject');
+            const codeLines = calculateCodeLines(orgAlias);
+            process.chdir('../../../../');
+            baseSummary.LinesOfCode = codeLines;
+            console.log('Lines of code calculated.');
+        } catch (error) {
+            console.error('Error calculating lines of code:', error.message);
+            errors.push({ calculateLinesOfCodeError: error.message });
+        }
+    }
+
+    if (!noTests) {
+        console.log('Running Apex tests...');
+        try {
+            const testResultsCommand = `sfdx force:apex:test:run --target-org "${orgAlias}" --test-level RunLocalTests --code-coverage --result-format json > ${orgSummaryDirectory}/testResults.json`;
+            execSync(testResultsCommand, { encoding: 'utf8' });
+            const testRunId = extractTestRunId(`${orgSummaryDirectory}/testResults.json`);
+            if (testRunId) {
+                console.log(`Checking Status of Job "${testRunId}"...`);
+                await pollTestRunResult(testRunId, orgSummaryDirectory, orgAlias);
+                const testResult = await getTestRunDetails(testRunId, orgSummaryDirectory, orgAlias);
+                const orgWideApexCoverage = await getOrgWideApexCoverage(orgSummaryDirectory, orgAlias);
+                baseSummary.Tests = {
+                    ApexUnitTests: testResult?.methodsCompleted ?? 0,
+                    TestDuration: testResult?.runtime.toString() ?? 'N/A',
+                    TestMethodsCompleted: testResult?.methodsCompleted ?? 0,
+                    TestMethodsFailed: testResult?.methodsFailed ?? 0,
+                    TestOutcome: testResult?.outcome ?? 'N/A',
+                    OrgWideApexCoverage: orgWideApexCoverage ?? 0,
+                    OrgWideFlowCoverage: calculateFlowOrgWideCoverage(calculateFlowCoverage(orgAlias)) ?? 0,
+                };
+                console.log('Apex tests completed successfully.');
+            }
+        } catch (error) {
+            console.error('Error running Apex tests:', error.message);
+            errors.push({ runApexTestsError: error.message });
+        }
+    }
+
+    baseSummary.ResultState = errors.length > 0 ? 'Failure' : 'Completed';
+    const summary: OrgSummary = {
+        ...baseSummary
+    };
+    console.log('Final Summary:', summary);
+    finish(orgSummaryDirectory, summary, keepData);
+    return summary;
 }
-function calculateComponentSummary(dataPoints: string[], queryResults: { [key: string]: QueryResult[] }): { [key: string]: ComponentSummary } {
+
+async function checkLimits(instanceURL: string, accessToken: string) {
+    const limitsApiUrl = `${instanceURL}/services/data/v50.0/limits/`;
+    try {
+        const limitsApiResponse = await axios.get(limitsApiUrl, {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+            },
+        });
+        const limitsData = limitsApiResponse.data;
+
+        // Initialize an empty object for limits
+        const limits: { [key: string]: Limit } = {};
+
+        // Iterate over keys in limitsData
+        for (const key in limitsData) {
+            if (Object.prototype.hasOwnProperty.call(limitsData, key)) {
+                const limitInfo = limitsData[key];
+                const description = `Description for ${key}`;
+
+                // Check if the limit has Max and Remaining properties
+                if (limitInfo && limitInfo.Max !== undefined && limitInfo.Remaining !== undefined) {
+                    limits[key] = {
+                        Max: limitInfo.Max,
+                        Remaining: limitInfo.Remaining,
+                        Usage: limitInfo.Max - limitInfo.Remaining,
+                        Description: description,
+                    };
+                } else {
+                    // Handle the case where Max or Remaining is undefined
+                    console.warn(`Skipping limit ${key} due to missing Max or Remaining.`);
+                }
+            }
+        }
+
+        return limits;
+    } catch (error) {
+        console.error('Error fetching limits from Salesforce API:', error.message);
+    }
+}
+
+function calculateComponentSummary(selectedDataPoints: string[], queryResults: { [key: string]: QueryResult[] }): { [key: string]: ComponentSummary } {
     const componentSummary: { [key: string]: ComponentSummary } = {};
-    for (const dataPoint of dataPoints) {
+    for (const dataPoint of selectedDataPoints) {
         const key = dataPoint;
         if (queryResults[dataPoint]) {
             const results = queryResults[dataPoint];
@@ -179,14 +263,41 @@ function queryMetadata(query: string, outputCsv: string, orgAlias?: string) {
 }
 
 function handleQueryError(dataPoint: string, error: any, errors: any[]) {
-    // Handle errors related to unsupported sObject types
-    if (error.stderr.includes('sObject type') && error.stderr.includes('is not supported')) {
+    const isUnsupportedTypeError = error.stderr.includes('sObject type') && error.stderr.includes('is not supported');
+    if (isUnsupportedTypeError) {
+        // Handle the specific unsupported sObject type error
         console.error(`Query for '${dataPoint}' is not supported. Defaulting to 'N/A' in the summary.`);
         errors.push(null); // Push a null value to indicate a handled error
     } else {
+        // Handle other errors
         console.error(`Error executing query for '${dataPoint}': ${error.message}`);
         errors.push(error);
     }
+}
+
+
+function finish(orgSummaryDirectory: string, summarizedOrg: OrgSummary, keepData: boolean) {
+    if (!keepData) {
+        const cleanUpDirectory = () => {
+            console.log('Cleaning up...');
+            const files = fs.readdirSync(orgSummaryDirectory);
+            for (const file of files) {
+                const filePath = `${orgSummaryDirectory}/${file}`;
+                if (fs.statSync(filePath).isFile()) {
+                    fs.unlinkSync(filePath);
+                } else {
+                    fse.removeSync(filePath);
+                }
+            }
+        };
+        cleanUpDirectory();
+    }
+    const saveSummaryAsJson = (summaryData: OrgSummary) => {
+        const jsonFilePath = `${orgSummaryDirectory}/orgsummary.json`;
+        fs.writeFileSync(jsonFilePath, JSON.stringify(summaryData, null, 2), 'utf8');
+        console.log(`Summary saved as: ${jsonFilePath}`);
+    };
+    saveSummaryAsJson(summarizedOrg);
 }
 
 function extractTestRunId(jsonFilePath: string): string | null {
@@ -226,24 +337,19 @@ async function pollTestRunResult(jobId: string, path: string, orgAlias?: string)
         console.log(`Test Run Status: ${status}`);
         await new Promise(resolve => setTimeout(resolve, 5000));
     }
-    console.log('Polling complete - Final Status:', status);
     return status;
 }
 
-function queryDataPoints(dataPoints: string[], orgSummaryDirectory: string, orgAlias?: string | undefined) {
+function queryDataPoints(selectedDataPoints: string[], orgSummaryDirectory: string, orgAlias?: string | undefined) {
     // QUERY TOOLING API DATAPOINTS
     const queryResults: { [key: string]: QueryResult[] } = {};
-    const errors: any[] = [];
-    for (const dataPoint of dataPoints) {
-        try {
-            const query = buildQuery(dataPoint);
-            const result = queryMetadata(query, (orgSummaryDirectory + '/' + dataPoint + '.csv'), orgAlias);
-            queryResults[dataPoint] = result instanceof Array ? result : [];
-        } catch (error) {
-            // Errors are now handled in queryMetadata
-        }
+    for (const dataPoint of selectedDataPoints) {
+        const query = buildQuery(dataPoint);
+        const result = queryMetadata(query, (orgSummaryDirectory + '/' + dataPoint + '.csv'), orgAlias);
+        queryResults[dataPoint] = result instanceof Array ? result : [];
+
     }
-    return { queryResults, errors }
+    return queryResults
 }
 
 async function getTestRunDetails(jobId: string, path: string, orgAlias?: string): Promise<{ outcome: string; runtime: number; methodsCompleted: number; methodsFailed: number } | null> {
@@ -280,48 +386,16 @@ async function getOrgWideApexCoverage(path: string, orgAlias?: string): Promise<
     }
 }
 
-function retrieveApexClasses(orgAlias?: string): string[] {
-    const retrieveCommand = `sf project retrieve start --metadata ApexClass --target-org ${orgAlias}`;
-    execSync(retrieveCommand, { encoding: 'utf8' });
-    const retrievedFiles = fs.readdirSync('./force-app/main/default/classes');
-    return retrievedFiles;
-}
-
-function retrieveApexTriggers(orgAlias?: string): string[] {
-    const retrieveCommand = `sf project retrieve start --metadata ApexTrigger --target-org ${orgAlias}`;
-    execSync(retrieveCommand, { encoding: 'utf8' });
-    const retrievedFiles = fs.readdirSync('./force-app/main/default/triggers');
-    return retrievedFiles;
-}
-
-function retrieveAuraComponents(orgAlias?: string): string[] {
-    const retrieveCommand = `sf project retrieve start --metadata AuraDefinitionBundle --target-org ${orgAlias}`;
-    execSync(retrieveCommand, { encoding: 'utf8' });
-    const retrievedFiles = fs.readdirSync('./force-app/main/default/aura');
-    return retrievedFiles;
-}
-
-function retrieveLWCMetadata(orgAlias?: string): string[] {
-    const retrieveCommand = `sf project retrieve start --metadata LightningComponentBundle --target-org ${orgAlias}`;
-    execSync(retrieveCommand, { encoding: 'utf8' });
-    const retrievedFiles = fs.readdirSync('./force-app/main/default/lwc');
-    return retrievedFiles;
-}
-
-function retrieveStaticResources(orgAlias?: string): string[] {
-    const retrieveCommand = `sf project retrieve start --metadata StaticResource --target-org ${orgAlias}`;
-    execSync(retrieveCommand, { encoding: 'utf8' });
-    const retrievedFiles = fs.readdirSync('./force-app/main/default/staticresources');
-    return retrievedFiles;
-}
-
-function calculateCodeLines(): {
-    ApexClass: { Total: number; Comments: number; Code: number };
-    ApexTrigger: { Total: number; Comments: number; Code: number };
-    AuraDefinitionBundle: { Total: number; Comments: number; Code: number };
-    LightningComponentBundle: { Total: number; Comments: number; Code: number };
-    StaticResource: { Total: number; Comments: number; Code: number };
+function calculateCodeLines(orgAlias?: string): {
+    ApexClass: { Lang: string; Total: number; Comments: number; Code: number };
+    ApexTrigger: { Lang: string; Total: number; Comments: number; Code: number };
+    AuraDefinitionBundle: { Lang: string; Total: number; Comments: number; Code: number };
+    LightningComponentBundle: { Lang: string; Total: number; Comments: number; Code: number };
+    StaticResource: { Lang: string; Total: number; Comments: number; Code: number };
 } {
+    const retrieveCommand = orgAlias ? `sf project retrieve start --metadata ApexClass ApexTrigger AuraDefinitionBundle LightningComponentBundle StaticResource --target-org ${orgAlias}` :
+        'sf project retrieve start --metadata ApexClass ApexTrigger AuraDefinitionBundle LightningComponentBundle StaticResource';
+    execSync(retrieveCommand, { encoding: 'utf8' });
     return {
         ApexClass: countCodeLines('./force-app/main/default/classes', '.cls', 'apex'),
         ApexTrigger: countCodeLines('./force-app/main/default/triggers', '.trigger', 'apex'),
@@ -353,4 +427,34 @@ interface QueryResult {
         Name: string;
     };
     LastModifiedDate: string;
+}
+
+interface OrgInfo {
+    username: string;
+    accessToken: string;
+    instanceUrl: string;
+    orgId: string;
+}
+
+function getOrgInfo(orgAlias?: string): OrgInfo {
+
+    try {
+        const command = orgAlias ? `sfdx force:org:display --verbose --json --targetusername ${orgAlias}` : 'sfdx force:org:display --verbose --json';
+        const output = execSync(command, { encoding: 'utf8' });
+        const orgInfo = JSON.parse(output);
+        return {
+            username: orgInfo.result.username,
+            accessToken: orgInfo.result.accessToken,
+            instanceUrl: orgInfo.result.instanceUrl,
+            orgId: orgInfo.result.id
+        };
+    } catch (error) {
+        console.error('Error getting org information:', error.message);
+    }
+    return {
+        username: '',
+        accessToken: '',
+        instanceUrl: '',
+        orgId: ''
+    }
 }

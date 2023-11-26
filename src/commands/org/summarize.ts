@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/member-ordering */
-/* eslint-disable sf-plugin/no-hardcoded-messages-flags */
 /* eslint-disable @typescript-eslint/require-await */
 /* eslint-disable class-methods-use-this */
 /* eslint-disable @typescript-eslint/no-floating-promises */
@@ -11,13 +10,12 @@
 import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
 import { summarizeOrg } from '../../module/summarizeOrg';
-import { summary } from '../../models/summary'
-import { dataPoints } from '../../data/DataPoints';
+import { OrgSummary } from '../../models/summary'
 
 Messages.importMessagesDirectory(__dirname);
 const messages = Messages.loadMessages('sf-org-summary', 'summarize');
 
-export default class Summarize extends SfCommand<summary> {
+export default class Summarize extends SfCommand<OrgSummary> {
   public static readonly summary = messages.getMessage('summary');
   public static readonly description = messages.getMessage('description');
   public static readonly examples = messages.getMessages('examples');
@@ -26,38 +24,47 @@ export default class Summarize extends SfCommand<summary> {
   protected static supportsUsername = true;
 
   public static readonly flags = {
-    targetusername: Flags.string({
-      summary: messages.getMessage('flags.name.summary'),
-      description: messages.getMessage('flags.name.description'),
-      char: 'u',
-      required: false,
-    }),
-    notests: Flags.boolean({
-      summary: messages.getMessage('flags.name.summary'),
-      description: messages.getMessage('flags.name.description'),
-      char: 't',
+    nocodelines: Flags.boolean({
+      summary: messages.getMessage('flags.nocodelines.summary'),
+      description: messages.getMessage('flags.nocodelines.description'),
+      char: 'c',
       required: false,
     }),
     datapoints: Flags.string({
-      summary: messages.getMessage('flags.name.summary'),
-      description: messages.getMessage('flags.name.description'),
+      summary: messages.getMessage('flags.datapoints.summary'),
+      description: messages.getMessage('flags.datapoints.description'),
       char: 'd',
+      required: false,
+    }),
+    keepdata: Flags.boolean({
+      summary: messages.getMessage('flags.keepdata.summary'),
+      description: messages.getMessage('flags.keepdata.description'),
+      char: 'k',
+      required: false,
+    }),
+    nolimits: Flags.boolean({
+      summary: messages.getMessage('flags.nolimits.summary'),
+      description: messages.getMessage('flags.nolimits.description'),
+      char: 'l',
+      required: false,
+    }),
+    notests: Flags.boolean({
+      summary: messages.getMessage('flags.notests.summary'),
+      description: messages.getMessage('flags.notests.description'),
+      char: 't',
+      required: false,
+    }),
+    targetusername: Flags.string({
+      summary: messages.getMessage('flags.targetusername.summary'),
+      description: messages.getMessage('flags.targetusername.description'),
+      char: 'u',
       required: false,
     })
   };
 
-  public async run(): Promise<summary> {
+  public async run(): Promise<OrgSummary> {
     const { flags } = await this.parse(Summarize);
-
-    const selectedDataPoints = flags.datapoints ? (flags.datapoints).split(',') : dataPoints;
-
-    if (flags.targetusername && flags.notests) {
-      return summarizeOrg(selectedDataPoints, flags.targetusername, flags.notests);
-    } else if (flags.targetusername) {
-      return summarizeOrg(selectedDataPoints, flags.targetusername);
-    } else {
-      return summarizeOrg(selectedDataPoints);
-    }
+    return summarizeOrg(flags)
   }
 
 }
