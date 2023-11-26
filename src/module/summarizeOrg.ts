@@ -98,6 +98,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     console.log('Base Summary:', baseSummary);
 
     if (selectedDataPoints && selectedDataPoints.length > 0) {
+        console.log(`Processing selected data points: ${selectedDataPoints.join(', ')}`);
         const queryResults = queryDataPoints(
             selectedDataPoints,
             orgSummaryDirectory,
@@ -107,23 +108,29 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
             selectedDataPoints,
             queryResults
         );
+        console.log('Data points processed successfully.');
     }
 
     if (!noLimits) {
+        console.log('Checking Org limits...');
         const limits = await checkLimits(info.instanceUrl, info.accessToken);
         baseSummary.Limits = limits;
+        console.log('Org limits checked.');
     }
 
     if (!noLinesOfCode) {
+        console.log('Calculating lines of code...');
         process.chdir(orgSummaryDirectory);
         execSync('sfdx force:project:create -x -n tempSFDXProject');
         process.chdir('./tempSFDXProject');
         const codeLines = calculateCodeLines(orgAlias);
         process.chdir('../../../../');
         baseSummary.LinesOfCode = codeLines;
+        console.log('Lines of code calculated.');
     }
 
     if (!noTests) {
+        console.log('Running Apex tests...');
         const testResultsCommand = `sfdx force:apex:test:run --target-org "${orgAlias}" --test-level RunLocalTests --code-coverage --result-format json > ${orgSummaryDirectory}/testResults.json`;
         execSync(testResultsCommand, { encoding: 'utf8' });
         const testRunId = extractTestRunId(`${orgSummaryDirectory}/testResults.json`);
@@ -141,6 +148,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
                 OrgWideApexCoverage: orgWideApexCoverage ?? 0,
                 OrgWideFlowCoverage: calculateFlowOrgWideCoverage(calculateFlowCoverage(orgAlias)) ?? 0,
             };
+            console.log('Apex tests completed successfully.');
         }
     }
 
