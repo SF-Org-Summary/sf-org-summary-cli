@@ -26,7 +26,7 @@ import { calculateFlowCoverage, calculateFlowOrgWideCoverage } from '../libs/Get
 import { dataPoints } from '../data/DataPoints';
 
 export interface flags {
-    datapoints?: string;
+    components?: string;
     keepdata?: boolean;
     nolimits?: boolean;
     notests?: boolean;
@@ -67,7 +67,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     const noLimits = flags.nolimits ? flags.nolimits : false;
     const noTests = flags.notests ? flags.notests : false;
     const noLinesOfCode = flags.nocodelines ? flags.nocodelines : false;
-    const selectedDataPoints = flags.datapoints ? flags.datapoints.split(',') : dataPoints;
+    const selectedDataPoints = flags.components ? flags.components.split(',') : dataPoints;
     const errors = [];
 
     // Prepare directories
@@ -98,13 +98,13 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     console.log('Base Summary:', baseSummary);
 
     if (selectedDataPoints && selectedDataPoints.length > 0) {
-        console.log(`Processing selected data points: ${selectedDataPoints.join(', ')}`);
+        console.log(`Processing selected components: ${selectedDataPoints.join(', ')}`);
         try {
             const queryResults = queryDataPoints(selectedDataPoints, orgSummaryDirectory, orgAlias);
             baseSummary.Components = calculateComponentSummary(selectedDataPoints, queryResults);
-            console.log('Data points processed successfully.');
+            console.log('components processed successfully.');
         } catch (error) {
-            console.error('Error processing selected data points:', error.message);
+            console.error('Error processing selected components:', error.message);
             errors.push({ componentSummaryError: error.message });
         }
     }

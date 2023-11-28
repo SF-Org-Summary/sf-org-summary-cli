@@ -22,11 +22,11 @@ Skip Apex Tests
 
 Skip Apex Tests
 
-# flags.datapoints.summary
+# flags.components.summary
 
 Set DataPoints To Query
 
-# flags.datapoints.description
+# flags.components.description
 
 Set DataPoints To Query
 

@@ -29,10 +29,10 @@ sfdx summarize:org [flags]
 
 ### Options
 
-    -c, --nocodelines: Skip counting lines of code.
-    -d, --datapoints <datapoint1,datapoint2>: Specify the data points to include in the summary.
+    -c, --components <datapoint1,datapoint2>: Specify the data points to include in the summary.
     -k, --keepdata: Keep the intermediate data files generated during the summary process.
     -l, --nolimits: Skip fetching and displaying Salesforce Org limits.
+    -n, --nocodelines: Skip counting lines of code.
     -t, --notests: Skip running Apex tests during the summary.
     -u, --targetusername <username>: Specify the target Salesforce Org username.
 
@@ -44,5 +44,5 @@ sfdx summarize:org -u my-org-username
 ```
 Run the summary with specific data points while skipping apex tests:
 ```bash
-sfdx summarize:org -u my-org-username --notests -d ApexClass,ApexTrigger,LightningComponentBundle
+sfdx summarize:org -u my-org-username --notests -c ApexClass,ApexTrigger,LightningComponentBundle
 ```
