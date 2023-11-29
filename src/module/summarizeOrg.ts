@@ -47,7 +47,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     const noTests = flags.notests ? flags.notests : false;
     const noLinesOfCode = flags.nocodelines ? flags.nocodelines : false;
     const selectedDataPoints = flags.components ? flags.components.split(',') : dataPoints;
-    const errors = [];
+    const errors: any[] = [];
 
     const dataDirectory = './orgsummary';
     if (!fs.existsSync(dataDirectory)) {
@@ -79,7 +79,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
         console.log(`Processing selected components: ${selectedDataPoints.join(', ')}`);
         try {
             const queryResults = queryDataPoints(selectedDataPoints, orgSummaryDirectory, orgAlias);
-            baseSummary.Components = calculateComponentSummary(selectedDataPoints, queryResults);
+            baseSummary.Components = calculateComponentSummary(selectedDataPoints, queryResults, errors);
             console.log('components processed successfully.');
         } catch (error) {
             console.error('Error processing selected components:', error.message);
@@ -231,10 +231,16 @@ async function getApexClassCoverageDetails(path: string, orgAlias?: string): Pro
     }
 }
 
-function calculateComponentSummary(selectedDataPoints: string[], queryResults: { [key: string]: QueryResult[] }): { [key: string]: ComponentSummary } {
+function calculateComponentSummary(selectedDataPoints: string[], queryResults: { [key: string]: QueryResult[] }, errors: any[]) {
     const componentSummary: { [key: string]: ComponentSummary } = {};
     for (const dataPoint of selectedDataPoints) {
         const key = dataPoint;
+        if (errors.some(error => error && error.dataPoint === dataPoint)) {
+            // Skip this data point if an error occurred
+            console.log(`Skipping data point '${dataPoint}' due to a previous error.`);
+            continue;
+        }
+
         if (queryResults[dataPoint]) {
             const results = queryResults[dataPoint];
             const resultLength = results.length;
@@ -245,13 +251,7 @@ function calculateComponentSummary(selectedDataPoints: string[], queryResults: {
                     Total: resultLength,
                     LastModifiedDate: lastModifiedDate
                 };
-            } else {
-                // Handle the case where the query returned no results
-                componentSummary[key] = { Total: 'N/A' };
             }
-        } else {
-            // Handle the case where the query failed
-            componentSummary[key] = { Total: 'N/A' };
         }
     }
     return componentSummary;
@@ -261,7 +261,6 @@ function calculateCoveragePercentage(linesCovered: number, linesUncovered: numbe
     const totalLines = linesCovered + linesUncovered;
     return totalLines > 0 ? (linesCovered / totalLines) * 100 : 0;
 }
-
 
 function getHealthCheckScore(path: string, orgAlias?: string): HealthCheckSummary {
     let healthCheckSummary: HealthCheckSummary = { 'Score': 'N/A', 'Criteria': 'N/A', 'Risks': 'N/A', 'Compliant': 'N/A', 'Details': [] };
@@ -327,8 +326,10 @@ function queryMetadata(query: string, outputCsv: string, orgAlias?: string) {
 function handleQueryError(dataPoint: string, error: any, errors: any[]) {
     const isUnsupportedTypeError = error.stderr.includes('sObject type') && error.stderr.includes('is not supported');
     if (isUnsupportedTypeError) {
+
+        // todo check flag
         // Handle the specific unsupported sObject type error
-        console.error(`Query for '${dataPoint}' is not supported. Defaulting to 'N/A' in the summary.`);
+        console.error(`Query for '${dataPoint}' is not supported.`);
         errors.push(null); // Push a null value to indicate a handled error
     } else {
         // Handle other errors
@@ -407,7 +408,6 @@ function queryDataPoints(selectedDataPoints: string[], orgSummaryDirectory: stri
         const query = buildQuery(dataPoint);
         const result = queryMetadata(query, (orgSummaryDirectory + '/' + dataPoint + '.csv'), orgAlias);
         queryResults[dataPoint] = result instanceof Array ? result : [];
-
     }
     return queryResults
 }
