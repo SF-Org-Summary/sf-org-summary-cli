@@ -20,7 +20,7 @@ import fs = require('fs');
 import axios from 'axios';
 import * as fse from 'fs-extra';
 import parse = require('csv-parse/lib/sync');
-import { ComponentSummary, HealthCheckRisk, HealthCheckSummary, Limit, OrgSummary } from '../models/summary';
+import { ApexClassCoverage, ComponentSummary, HealthCheckRisk, HealthCheckSummary, Limit, OrgSummary } from '../models/summary';
 import { countCodeLines } from '../libs/CountCodeLines';
 import { calculateFlowCoverage, calculateFlowOrgWideCoverage } from '../libs/GetFlowCoverage';
 import { dataPoints } from '../data/DataPoints';
@@ -33,29 +33,6 @@ export interface flags {
     notests?: boolean;
     nocodelines?: boolean;
     targetusername?: string;
-}
-
-export function buildOrgSummary(
-    timestamp: string,
-    currentDate: string,
-    info: OrgInfo,
-    resultState: string,
-    limits?: { [key: string]: Limit }
-): OrgSummary {
-    const baseSummary: OrgSummary = {
-        Timestamp: timestamp,
-        SummaryDate: currentDate,
-        ResultState: resultState,
-        OrgId: info.orgId,
-        Username: info.username,
-        OrgInstanceURL: info.instanceUrl,
-    };
-
-    if (limits) {
-        baseSummary.Limits = limits;
-    }
-
-    return baseSummary;
 }
 
 export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
@@ -72,7 +49,6 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     const selectedDataPoints = flags.components ? flags.components.split(',') : dataPoints;
     const errors = [];
 
-    // Prepare directories
     const dataDirectory = './orgsummary';
     if (!fs.existsSync(dataDirectory)) {
         fs.mkdirSync(dataDirectory);
@@ -92,7 +68,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     const baseSummary: OrgSummary = {
         Timestamp: timestamp,
         SummaryDate: currentDate,
-        ResultState: 'Pending', // Adjust as needed
+        ResultState: 'Pending',
         OrgId: info.orgId,
         Username: info.username,
         OrgInstanceURL: info.instanceUrl,
@@ -123,7 +99,14 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
         console.log('Checking Org limits...');
         try {
             const limits = await checkLimits(info.instanceUrl, info.accessToken);
-            baseSummary.Limits = limits;
+            const Applicable: number = limits ? limits.length : 0;
+            const Reached: number = limits ? limits.filter((limit) => limit.Remaining === 0).length : 0;
+            baseSummary.Limits = {
+                Applicable,
+                Reached,
+                'Unattained': (Applicable - Reached),
+                'Details': limits
+            };
             console.log('Org limits checked.');
         } catch (error) {
             console.error('Error checking org limits:', error.message);
@@ -168,7 +151,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
                 };
                 baseSummary.TestCoverageApex = {
                     'Total': orgWideApexCoverage ?? 0,
-                    'Details': []
+                    'Details': await getApexClassCoverageDetails(orgSummaryDirectory, orgAlias),
                 };
                 baseSummary.TestCoverageFlow = {
                     'Total': orgWideFlowCoverage ?? 0,
@@ -192,7 +175,8 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     return summary;
 }
 
-async function checkLimits(instanceURL: string, accessToken: string) {
+async function checkLimits(instanceURL: string, accessToken: string): Promise<Limit[]> {
+    const limits: Limit[] = [];
     const limitsApiUrl = `${instanceURL}/services/data/v50.0/limits/`;
     try {
         const limitsApiResponse = await axios.get(limitsApiUrl, {
@@ -201,24 +185,18 @@ async function checkLimits(instanceURL: string, accessToken: string) {
             },
         });
         const limitsData = limitsApiResponse.data;
-
-        // Initialize an empty object for limits
-        const limits: { [key: string]: Limit } = {};
-
-        // Iterate over keys in limitsData
         for (const key in limitsData) {
             if (Object.prototype.hasOwnProperty.call(limitsData, key)) {
                 const limitInfo = limitsData[key];
                 const description = `Description for ${key}`;
-
-                // Check if the limit has Max and Remaining properties
                 if (limitInfo && limitInfo.Max !== undefined && limitInfo.Remaining !== undefined) {
-                    limits[key] = {
+                    limits.push({
+                        Name: key,
                         Max: limitInfo.Max,
                         Remaining: limitInfo.Remaining,
                         Usage: limitInfo.Max - limitInfo.Remaining,
                         Description: description,
-                    };
+                    });
                 } else {
                     // Handle the case where Max or Remaining is undefined
                     console.warn(`Skipping limit ${key} due to missing Max or Remaining.`);
@@ -229,6 +207,27 @@ async function checkLimits(instanceURL: string, accessToken: string) {
         return limits;
     } catch (error) {
         console.error('Error fetching limits from Salesforce API:', error.message);
+    }
+    return limits;
+}
+
+// Function to get details for each Apex class coverage
+async function getApexClassCoverageDetails(path: string, orgAlias?: string): Promise<ApexClassCoverage[]> {
+    try {
+        const query = 'SELECT ApexClassOrTrigger.Name, NumLinesCovered, NumLinesUncovered FROM ApexCodeCoverageAggregate';
+        const results = await queryMetadata(query, path + '/apexClassCoverageDetails.json', orgAlias);
+
+        console.log('getApexClassCoverageDetails', results);
+
+        const coverageDetails: ApexClassCoverage[] = results.map((result: any) => ({
+            Class: result['ApexClassOrTrigger.Name'] || 'N/A',
+            CoveragePercentage: calculateCoveragePercentage(result.NumLinesCovered, result.NumLinesUncovered)
+        }));
+
+        return coverageDetails;
+    } catch (error) {
+        console.error('Error getting Apex class coverage details:', error.message);
+        return [];
     }
 }
 
@@ -258,9 +257,14 @@ function calculateComponentSummary(selectedDataPoints: string[], queryResults: {
     return componentSummary;
 }
 
+function calculateCoveragePercentage(linesCovered: number, linesUncovered: number): number {
+    const totalLines = linesCovered + linesUncovered;
+    return totalLines > 0 ? (linesCovered / totalLines) * 100 : 0;
+}
+
 
 function getHealthCheckScore(path: string, orgAlias?: string): HealthCheckSummary {
-    let healthCheckSummary: HealthCheckSummary = { 'Score': 'N/A', 'Criteria': 'N/A', 'Risks': 'N/A', 'MeetsStandard': 'N/A', 'Details': [] };
+    let healthCheckSummary: HealthCheckSummary = { 'Score': 'N/A', 'Criteria': 'N/A', 'Risks': 'N/A', 'Compliant': 'N/A', 'Details': [] };
     let commandHCS;
     const commandHCSPath = path + '/HCS.csv';
     const commandHCRPath = path + '/HCR.csv';
@@ -398,7 +402,6 @@ async function pollTestRunResult(jobId: string, path: string, orgAlias?: string)
 }
 
 function queryDataPoints(selectedDataPoints: string[], orgSummaryDirectory: string, orgAlias?: string | undefined) {
-    // QUERY TOOLING API DATAPOINTS
     const queryResults: { [key: string]: QueryResult[] } = {};
     for (const dataPoint of selectedDataPoints) {
         const query = buildQuery(dataPoint);

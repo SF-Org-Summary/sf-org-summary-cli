@@ -9,7 +9,7 @@ export type OrgSummary = {
   Components: { [key: string]: ComponentSummary };
   LinesOfCode: { [key: string]: LinesOfCode };
   HealthCheck: HealthCheckSummary;
-  Limits: { [key: string]: Limit };
+  Limits: LimitSummary;
   Tests: TestSummary;
   TestCoverageApex: TestCoverageApex;
   TestCoverageFlow: TestCoverageFlow;
@@ -20,9 +20,16 @@ export interface ComponentSummary {
   LastModifiedDate?: string;
 }
 
+export interface LimitSummary {
+  Applicable: number;
+  Reached: number;
+  Unattained: number;
+  Details: Limit[];
+}
+
 export interface FlowCoverage {
   Flow: number | 'N/A';
-  Coverage: number | 'N/A';
+  CoveragePercentage: number | 'N/A';
 }
 
 export interface TestCoverageFlow {
@@ -37,7 +44,7 @@ export interface TestCoverageApex {
 
 export interface ApexClassCoverage {
   Class: number | 'N/A';
-  Coverage: number | 'N/A';
+  CoveragePercentage: number | 'N/A';
 }
 
 export interface HealthCheckSummary {
@@ -58,6 +65,7 @@ export interface HealthCheckRisk {
 }
 
 export interface Limit {
+  Name: string;
   Description: string;
   Max: number | 'N/A';
   Remaining: number | 'N/A';
