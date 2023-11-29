@@ -30,6 +30,12 @@ export default class Summarize extends SfCommand<OrgSummary> {
       char: 'c',
       required: false,
     }),
+    nohealthcheck: Flags.boolean({
+      summary: messages.getMessage('flags.nohealthcheck.summary'),
+      description: messages.getMessage('flags.nohealthcheck.description'),
+      char: 'g',
+      required: false,
+    }),
     keepdata: Flags.boolean({
       summary: messages.getMessage('flags.keepdata.summary'),
       description: messages.getMessage('flags.keepdata.description'),

@@ -54,6 +54,14 @@ Keep Data Files
 
 Keep Data Files
 
+# flags.nohealthcheck.summary
+
+Keep Data Files
+
+# flags.nohealthcheck.description
+
+Keep Data Files
+
 # examples
 
 - <%= config.bin %> <%= command.id %>

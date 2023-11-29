@@ -7,14 +7,54 @@ export type OrgSummary = {
   Username: string;
 } & Partial<{
   Components: { [key: string]: ComponentSummary };
-  Limits: { [key: string]: Limit };
   LinesOfCode: { [key: string]: LinesOfCode };
+  HealthCheck: HealthCheckSummary;
+  Limits: { [key: string]: Limit };
   Tests: TestSummary;
+  TestCoverageApex: TestCoverageApex;
+  TestCoverageFlow: TestCoverageFlow;
 }>;
 
 export interface ComponentSummary {
   Total: number | 'N/A';
   LastModifiedDate?: string;
+}
+
+export interface FlowCoverage {
+  Flow: number | 'N/A';
+  Coverage: number | 'N/A';
+}
+
+export interface TestCoverageFlow {
+  Total: number | 'N/A';
+  Details: FlowCoverage[];
+}
+
+export interface TestCoverageApex {
+  Total: number | 'N/A';
+  Details: ApexClassCoverage[];
+}
+
+export interface ApexClassCoverage {
+  Class: number | 'N/A';
+  Coverage: number | 'N/A';
+}
+
+export interface HealthCheckSummary {
+  Score: number | 'N/A';
+  Criteria: number | 'N/A';
+  Compliant: number | 'N/A';
+  Risks: number | 'N/A';
+  Details: HealthCheckRisk[];
+
+}
+
+export interface HealthCheckRisk {
+  OrgValue: string;
+  RiskType: string;
+  Setting: string;
+  SettingGroup: string;
+  SettingRiskCategory: string;
 }
 
 export interface Limit {
@@ -36,6 +76,4 @@ export interface TestSummary {
   TestMethodsCompleted: number;
   TestMethodsFailed: number;
   TestOutcome: string;
-  OrgWideApexCoverage: number;
-  OrgWideFlowCoverage: number;
 }

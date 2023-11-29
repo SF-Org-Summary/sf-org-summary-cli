@@ -20,13 +20,14 @@ import fs = require('fs');
 import axios from 'axios';
 import * as fse from 'fs-extra';
 import parse = require('csv-parse/lib/sync');
-import { ComponentSummary, Limit, OrgSummary } from '../models/summary';
+import { ComponentSummary, HealthCheckRisk, HealthCheckSummary, Limit, OrgSummary } from '../models/summary';
 import { countCodeLines } from '../libs/CountCodeLines';
 import { calculateFlowCoverage, calculateFlowOrgWideCoverage } from '../libs/GetFlowCoverage';
 import { dataPoints } from '../data/DataPoints';
 
 export interface flags {
     components?: string;
+    nohealthcheck?: boolean;
     keepdata?: boolean;
     nolimits?: boolean;
     notests?: boolean;
@@ -63,6 +64,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     const currentDate = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
     const timestamp = Date.now().toString();
     const info = getOrgInfo(orgAlias);
+    const noHealthCheck = flags.nohealthcheck ? flags.nohealthcheck : false;
     const keepData = flags.keepdata ? flags.keepdata : false;
     const noLimits = flags.nolimits ? flags.nolimits : false;
     const noTests = flags.notests ? flags.notests : false;
@@ -109,6 +111,14 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
         }
     }
 
+    if (!noHealthCheck) {
+        try {
+            baseSummary.HealthCheck = getHealthCheckScore(orgSummaryDirectory, orgAlias);
+        } catch (error) {
+            errors.push({ getHealthCheckScoreError: error.message });
+        }
+    }
+
     if (!noLimits) {
         console.log('Checking Org limits...');
         try {
@@ -148,15 +158,23 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
                 await pollTestRunResult(testRunId, orgSummaryDirectory, orgAlias);
                 const testResult = await getTestRunDetails(testRunId, orgSummaryDirectory, orgAlias);
                 const orgWideApexCoverage = await getOrgWideApexCoverage(orgSummaryDirectory, orgAlias);
+                const orgWideFlowCoverage = calculateFlowOrgWideCoverage(calculateFlowCoverage(orgAlias));
                 baseSummary.Tests = {
                     ApexUnitTests: testResult?.methodsCompleted ?? 0,
                     TestDuration: testResult?.runtime.toString() ?? 'N/A',
                     TestMethodsCompleted: testResult?.methodsCompleted ?? 0,
                     TestMethodsFailed: testResult?.methodsFailed ?? 0,
-                    TestOutcome: testResult?.outcome ?? 'N/A',
-                    OrgWideApexCoverage: orgWideApexCoverage ?? 0,
-                    OrgWideFlowCoverage: calculateFlowOrgWideCoverage(calculateFlowCoverage(orgAlias)) ?? 0,
+                    TestOutcome: testResult?.outcome ?? 'N/A'
                 };
+                baseSummary.TestCoverageApex = {
+                    'Total': orgWideApexCoverage ?? 0,
+                    'Details': []
+                };
+                baseSummary.TestCoverageFlow = {
+                    'Total': orgWideFlowCoverage ?? 0,
+                    'Details': []
+                };
+
                 console.log('Apex tests completed successfully.');
             }
         } catch (error) {
@@ -241,6 +259,46 @@ function calculateComponentSummary(selectedDataPoints: string[], queryResults: {
 }
 
 
+function getHealthCheckScore(path: string, orgAlias?: string): HealthCheckSummary {
+    let healthCheckSummary: HealthCheckSummary = { 'Score': 'N/A', 'Criteria': 'N/A', 'Risks': 'N/A', 'MeetsStandard': 'N/A', 'Details': [] };
+    let commandHCS;
+    const commandHCSPath = path + '/HCS.csv';
+    const commandHCRPath = path + '/HCR.csv';
+    let commandHCR;
+    if (orgAlias) {
+        commandHCS = `sfdx data:query --query "SELECT Score FROM SecurityHealthCheck" --target-org "${orgAlias}" --result-format csv --use-tooling-api > ${commandHCSPath}`;
+        commandHCR = `sfdx data:query --query "SELECT OrgValue, RiskType, Setting, SettingGroup, SettingRiskCategory FROM SecurityHealthCheckRisks" --target-org "${orgAlias}" --result-format csv --use-tooling-api > ${commandHCRPath}`;
+    } else {
+        commandHCS = `sfdx data:query --query "SELECT Score FROM SecurityHealthCheck" --result-format csv --use-tooling-api > ${commandHCSPath}`;
+        commandHCR = `sfdx data:query --query "SELECT OrgValue, RiskType, Setting, SettingGroup, SettingRiskCategory FROM SecurityHealthCheckRisks" --result-format csv --use-tooling-api > ${commandHCSPath}`;
+    }
+
+    try {
+        execSync(commandHCS, { encoding: 'utf8' });
+        const hcsData = fs.readFileSync(commandHCSPath, 'utf8');
+        const hcScore = parse(hcsData, { columns: true });
+        execSync(commandHCR, { encoding: 'utf8' });
+        const hcrData = fs.readFileSync(commandHCRPath, 'utf8');
+        const hcRisks = parse(hcrData, { columns: true });
+        const hcRisksFiltered = (hcRisks as HealthCheckRisk[]).filter((risk) => risk.RiskType !== 'MEETS_STANDARD');
+
+        healthCheckSummary =
+        {
+            'Score': hcScore[0].Score as number,
+            'Criteria': hcRisks.length,
+            'Compliant': (hcRisks.length - hcRisksFiltered.length),
+            'Risks': hcRisksFiltered.length,
+            'Details': hcRisks
+        }
+        console.log('Health Check Score and Health Risks added sucessfully.');
+        return healthCheckSummary;
+    } catch (error) {
+        console.error('Error adding Health Check Score and Health Risks:', error.message);
+    }
+    return healthCheckSummary;
+
+}
+
 function buildQuery(dataPoint: string): string {
     return `SELECT CreatedBy.Name, CreatedDate, Id, LastModifiedBy.Name, LastModifiedDate FROM ${dataPoint} ORDER BY LastModifiedDate DESC`;
 }
@@ -274,7 +332,6 @@ function handleQueryError(dataPoint: string, error: any, errors: any[]) {
         errors.push(error);
     }
 }
-
 
 function finish(orgSummaryDirectory: string, summarizedOrg: OrgSummary, keepData: boolean) {
     if (!keepData) {
