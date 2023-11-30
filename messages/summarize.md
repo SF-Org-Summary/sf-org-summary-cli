@@ -22,11 +22,11 @@ Skip Apex Tests
 
 Skip Apex Tests
 
-# flags.datapoints.summary
+# flags.components.summary
 
 Set DataPoints To Query
 
-# flags.datapoints.description
+# flags.components.description
 
 Set DataPoints To Query
 
@@ -51,6 +51,22 @@ Keep Data Files
 Keep Data Files
 
 # flags.nocodelines.description
+
+Keep Data Files
+
+# flags.nohealthcheck.summary
+
+Keep Data Files
+
+# flags.nohealthcheck.description
+
+Keep Data Files
+
+# flags.noscan.description
+
+Keep Data Files
+
+# flags.noscan.summary
 
 Keep Data Files
 

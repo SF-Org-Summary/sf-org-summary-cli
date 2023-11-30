@@ -17,44 +17,24 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { execSync } from 'node:child_process';
 import fs = require('fs');
+import path = require('path');
 import axios from 'axios';
 import * as fse from 'fs-extra';
 import parse = require('csv-parse/lib/sync');
-import { ComponentSummary, Limit, OrgSummary } from '../models/summary';
+import { ApexClassCoverage, ComponentSummary, HealthCheckRisk, HealthCheckSummary, Limit, OrgSummary } from '../models/summary';
 import { countCodeLines } from '../libs/CountCodeLines';
 import { calculateFlowCoverage, calculateFlowOrgWideCoverage } from '../libs/GetFlowCoverage';
 import { dataPoints } from '../data/DataPoints';
 
 export interface flags {
-    datapoints?: string;
+    components?: string;
+    nohealthcheck?: boolean;
     keepdata?: boolean;
     nolimits?: boolean;
+    noscan?: boolean;
     notests?: boolean;
     nocodelines?: boolean;
     targetusername?: string;
-}
-
-export function buildOrgSummary(
-    timestamp: string,
-    currentDate: string,
-    info: OrgInfo,
-    resultState: string,
-    limits?: { [key: string]: Limit }
-): OrgSummary {
-    const baseSummary: OrgSummary = {
-        Timestamp: timestamp,
-        SummaryDate: currentDate,
-        ResultState: resultState,
-        OrgId: info.orgId,
-        Username: info.username,
-        OrgInstanceURL: info.instanceUrl,
-    };
-
-    if (limits) {
-        baseSummary.Limits = limits;
-    }
-
-    return baseSummary;
 }
 
 export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
@@ -63,14 +43,15 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     const currentDate = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
     const timestamp = Date.now().toString();
     const info = getOrgInfo(orgAlias);
+    const noHealthCheck = flags.nohealthcheck ? flags.nohealthcheck : false;
     const keepData = flags.keepdata ? flags.keepdata : false;
     const noLimits = flags.nolimits ? flags.nolimits : false;
     const noTests = flags.notests ? flags.notests : false;
     const noLinesOfCode = flags.nocodelines ? flags.nocodelines : false;
-    const selectedDataPoints = flags.datapoints ? flags.datapoints.split(',') : dataPoints;
-    const errors = [];
+    const noScan = flags.noscan ? flags.noscan : false;
+    const selectedDataPoints = flags.components ? flags.components.split(',') : dataPoints;
+    const errors: any[] = [];
 
-    // Prepare directories
     const dataDirectory = './orgsummary';
     if (!fs.existsSync(dataDirectory)) {
         fs.mkdirSync(dataDirectory);
@@ -90,7 +71,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     const baseSummary: OrgSummary = {
         Timestamp: timestamp,
         SummaryDate: currentDate,
-        ResultState: 'Pending', // Adjust as needed
+        ResultState: 'Pending',
         OrgId: info.orgId,
         Username: info.username,
         OrgInstanceURL: info.instanceUrl,
@@ -98,14 +79,22 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     console.log('Base Summary:', baseSummary);
 
     if (selectedDataPoints && selectedDataPoints.length > 0) {
-        console.log(`Processing selected data points: ${selectedDataPoints.join(', ')}`);
+        console.log(`Processing selected components: ${selectedDataPoints.join(', ')}`);
         try {
             const queryResults = queryDataPoints(selectedDataPoints, orgSummaryDirectory, orgAlias);
-            baseSummary.Components = calculateComponentSummary(selectedDataPoints, queryResults);
-            console.log('Data points processed successfully.');
+            baseSummary.Components = calculateComponentSummary(selectedDataPoints, queryResults, errors);
+            console.log('components processed successfully.');
         } catch (error) {
-            console.error('Error processing selected data points:', error.message);
+            console.error('Error processing selected components:', error.message);
             errors.push({ componentSummaryError: error.message });
+        }
+    }
+
+    if (!noHealthCheck) {
+        try {
+            baseSummary.HealthCheck = getHealthCheckScore(orgSummaryDirectory, orgAlias);
+        } catch (error) {
+            errors.push({ getHealthCheckScoreError: error.message });
         }
     }
 
@@ -113,7 +102,14 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
         console.log('Checking Org limits...');
         try {
             const limits = await checkLimits(info.instanceUrl, info.accessToken);
-            baseSummary.Limits = limits;
+            const Applicable: number = limits ? limits.length : 0;
+            const Reached: number = limits ? limits.filter((limit) => limit.Remaining === 0).length : 0;
+            baseSummary.Limits = {
+                Applicable,
+                Reached,
+                'Unattained': (Applicable - Reached),
+                'Details': limits
+            };
             console.log('Org limits checked.');
         } catch (error) {
             console.error('Error checking org limits:', error.message);
@@ -121,18 +117,24 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
         }
     }
 
-    if (!noLinesOfCode) {
-        console.log('Calculating lines of code...');
+    if (!noScan) {
         try {
             process.chdir(orgSummaryDirectory);
             execSync('sfdx force:project:create -x -n tempSFDXProject');
             process.chdir('./tempSFDXProject');
-            const codeLines = calculateCodeLines(orgAlias);
+            const retrieveCommand = orgAlias ? `sf project retrieve start --metadata ApexClass ApexTrigger AuraDefinitionBundle LightningComponentBundle StaticResource --target-org ${orgAlias}` :
+                'sf project retrieve start --metadata ApexClass ApexTrigger AuraDefinitionBundle LightningComponentBundle StaticResource';
+            execSync(retrieveCommand, { encoding: 'utf8' });
+            console.log('Running CLI scanner...');
+            execSync('sfdx scanner:run --target . --format csv --normalize-severity > CLIScannerResults.csv');
+            const results = preprocessResults();
+            baseSummary.CodeAnalyzer = { 'Risks': results.length, 'Details': results };
+            const codeLines = calculateCodeLines();
             process.chdir('../../../../');
             baseSummary.LinesOfCode = codeLines;
-            console.log('Lines of code calculated.');
+            // console.log('PreprocessedScanResult', results);
         } catch (error) {
-            console.error('Error calculating lines of code:', error.message);
+            console.error('Error running Code Summary:', error.message);
             errors.push({ calculateLinesOfCodeError: error.message });
         }
     }
@@ -148,15 +150,23 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
                 await pollTestRunResult(testRunId, orgSummaryDirectory, orgAlias);
                 const testResult = await getTestRunDetails(testRunId, orgSummaryDirectory, orgAlias);
                 const orgWideApexCoverage = await getOrgWideApexCoverage(orgSummaryDirectory, orgAlias);
+                const orgWideFlowCoverage = calculateFlowOrgWideCoverage(calculateFlowCoverage(orgAlias));
                 baseSummary.Tests = {
                     ApexUnitTests: testResult?.methodsCompleted ?? 0,
                     TestDuration: testResult?.runtime.toString() ?? 'N/A',
                     TestMethodsCompleted: testResult?.methodsCompleted ?? 0,
                     TestMethodsFailed: testResult?.methodsFailed ?? 0,
-                    TestOutcome: testResult?.outcome ?? 'N/A',
-                    OrgWideApexCoverage: orgWideApexCoverage ?? 0,
-                    OrgWideFlowCoverage: calculateFlowOrgWideCoverage(calculateFlowCoverage(orgAlias)) ?? 0,
+                    TestOutcome: testResult?.outcome ?? 'N/A'
                 };
+                baseSummary.TestCoverageApex = {
+                    'Total': orgWideApexCoverage ?? 0,
+                    'Details': await getApexClassCoverageDetails(orgSummaryDirectory, orgAlias),
+                };
+                baseSummary.TestCoverageFlow = {
+                    'Total': orgWideFlowCoverage ?? 0,
+                    'Details': []
+                };
+
                 console.log('Apex tests completed successfully.');
             }
         } catch (error) {
@@ -174,7 +184,8 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     return summary;
 }
 
-async function checkLimits(instanceURL: string, accessToken: string) {
+async function checkLimits(instanceURL: string, accessToken: string): Promise<Limit[]> {
+    const limits: Limit[] = [];
     const limitsApiUrl = `${instanceURL}/services/data/v50.0/limits/`;
     try {
         const limitsApiResponse = await axios.get(limitsApiUrl, {
@@ -183,24 +194,18 @@ async function checkLimits(instanceURL: string, accessToken: string) {
             },
         });
         const limitsData = limitsApiResponse.data;
-
-        // Initialize an empty object for limits
-        const limits: { [key: string]: Limit } = {};
-
-        // Iterate over keys in limitsData
         for (const key in limitsData) {
             if (Object.prototype.hasOwnProperty.call(limitsData, key)) {
                 const limitInfo = limitsData[key];
                 const description = `Description for ${key}`;
-
-                // Check if the limit has Max and Remaining properties
                 if (limitInfo && limitInfo.Max !== undefined && limitInfo.Remaining !== undefined) {
-                    limits[key] = {
+                    limits.push({
+                        Name: key,
                         Max: limitInfo.Max,
                         Remaining: limitInfo.Remaining,
                         Usage: limitInfo.Max - limitInfo.Remaining,
                         Description: description,
-                    };
+                    });
                 } else {
                     // Handle the case where Max or Remaining is undefined
                     console.warn(`Skipping limit ${key} due to missing Max or Remaining.`);
@@ -212,12 +217,39 @@ async function checkLimits(instanceURL: string, accessToken: string) {
     } catch (error) {
         console.error('Error fetching limits from Salesforce API:', error.message);
     }
+    return limits;
 }
 
-function calculateComponentSummary(selectedDataPoints: string[], queryResults: { [key: string]: QueryResult[] }): { [key: string]: ComponentSummary } {
+// Function to get details for each Apex class coverage
+async function getApexClassCoverageDetails(path: string, orgAlias?: string): Promise<ApexClassCoverage[]> {
+    try {
+        const query = 'SELECT ApexClassOrTrigger.Name, NumLinesCovered, NumLinesUncovered FROM ApexCodeCoverageAggregate';
+        const results = await queryMetadata(query, path + '/apexClassCoverageDetails.json', orgAlias);
+
+        console.log('getApexClassCoverageDetails', results);
+
+        const coverageDetails: ApexClassCoverage[] = results.map((result: any) => ({
+            Class: result['ApexClassOrTrigger.Name'] || 'N/A',
+            CoveragePercentage: calculateCoveragePercentage(result.NumLinesCovered, result.NumLinesUncovered)
+        }));
+
+        return coverageDetails;
+    } catch (error) {
+        console.error('Error getting Apex class coverage details:', error.message);
+        return [];
+    }
+}
+
+function calculateComponentSummary(selectedDataPoints: string[], queryResults: { [key: string]: QueryResult[] }, errors: any[]) {
     const componentSummary: { [key: string]: ComponentSummary } = {};
     for (const dataPoint of selectedDataPoints) {
         const key = dataPoint;
+        if (errors.some(error => error && error.dataPoint === dataPoint)) {
+            // Skip this data point if an error occurred
+            console.log(`Skipping data point '${dataPoint}' due to a previous error.`);
+            continue;
+        }
+
         if (queryResults[dataPoint]) {
             const results = queryResults[dataPoint];
             const resultLength = results.length;
@@ -228,18 +260,56 @@ function calculateComponentSummary(selectedDataPoints: string[], queryResults: {
                     Total: resultLength,
                     LastModifiedDate: lastModifiedDate
                 };
-            } else {
-                // Handle the case where the query returned no results
-                componentSummary[key] = { Total: 'N/A' };
             }
-        } else {
-            // Handle the case where the query failed
-            componentSummary[key] = { Total: 'N/A' };
         }
     }
     return componentSummary;
 }
 
+function calculateCoveragePercentage(linesCovered: number, linesUncovered: number): number {
+    const totalLines = linesCovered + linesUncovered;
+    return totalLines > 0 ? (linesCovered / totalLines) * 100 : 0;
+}
+
+function getHealthCheckScore(path: string, orgAlias?: string): HealthCheckSummary {
+    let healthCheckSummary: HealthCheckSummary = { 'Score': 'N/A', 'Criteria': 'N/A', 'Risks': 'N/A', 'Compliant': 'N/A', 'Details': [] };
+    let commandHCS;
+    const commandHCSPath = path + '/HCS.csv';
+    const commandHCRPath = path + '/HCR.csv';
+    let commandHCR;
+    if (orgAlias) {
+        commandHCS = `sfdx data:query --query "SELECT Score FROM SecurityHealthCheck" --target-org "${orgAlias}" --result-format csv --use-tooling-api > ${commandHCSPath}`;
+        commandHCR = `sfdx data:query --query "SELECT OrgValue, RiskType, Setting, SettingGroup, SettingRiskCategory FROM SecurityHealthCheckRisks" --target-org "${orgAlias}" --result-format csv --use-tooling-api > ${commandHCRPath}`;
+    } else {
+        commandHCS = `sfdx data:query --query "SELECT Score FROM SecurityHealthCheck" --result-format csv --use-tooling-api > ${commandHCSPath}`;
+        commandHCR = `sfdx data:query --query "SELECT OrgValue, RiskType, Setting, SettingGroup, SettingRiskCategory FROM SecurityHealthCheckRisks" --result-format csv --use-tooling-api > ${commandHCSPath}`;
+    }
+
+    try {
+        execSync(commandHCS, { encoding: 'utf8' });
+        const hcsData = fs.readFileSync(commandHCSPath, 'utf8');
+        const hcScore = parse(hcsData, { columns: true });
+        execSync(commandHCR, { encoding: 'utf8' });
+        const hcrData = fs.readFileSync(commandHCRPath, 'utf8');
+        const hcRisks = parse(hcrData, { columns: true });
+        const hcRisksFiltered = (hcRisks as HealthCheckRisk[]).filter((risk) => risk.RiskType !== 'MEETS_STANDARD');
+
+        healthCheckSummary =
+        {
+            'Score': hcScore[0].Score as number,
+            'Criteria': hcRisks.length,
+            'Compliant': (hcRisks.length - hcRisksFiltered.length),
+            'Risks': hcRisksFiltered.length,
+            'Details': hcRisks
+        }
+        console.log('Health Check Score and Health Risks added sucessfully.');
+        return healthCheckSummary;
+    } catch (error) {
+        console.error('Error adding Health Check Score and Health Risks:', error.message);
+    }
+    return healthCheckSummary;
+
+}
 
 function buildQuery(dataPoint: string): string {
     return `SELECT CreatedBy.Name, CreatedDate, Id, LastModifiedBy.Name, LastModifiedDate FROM ${dataPoint} ORDER BY LastModifiedDate DESC`;
@@ -265,8 +335,10 @@ function queryMetadata(query: string, outputCsv: string, orgAlias?: string) {
 function handleQueryError(dataPoint: string, error: any, errors: any[]) {
     const isUnsupportedTypeError = error.stderr.includes('sObject type') && error.stderr.includes('is not supported');
     if (isUnsupportedTypeError) {
+
+        // todo check flag
         // Handle the specific unsupported sObject type error
-        console.error(`Query for '${dataPoint}' is not supported. Defaulting to 'N/A' in the summary.`);
+        console.error(`Query for '${dataPoint}' is not supported.`);
         errors.push(null); // Push a null value to indicate a handled error
     } else {
         // Handle other errors
@@ -274,7 +346,6 @@ function handleQueryError(dataPoint: string, error: any, errors: any[]) {
         errors.push(error);
     }
 }
-
 
 function finish(orgSummaryDirectory: string, summarizedOrg: OrgSummary, keepData: boolean) {
     if (!keepData) {
@@ -341,13 +412,11 @@ async function pollTestRunResult(jobId: string, path: string, orgAlias?: string)
 }
 
 function queryDataPoints(selectedDataPoints: string[], orgSummaryDirectory: string, orgAlias?: string | undefined) {
-    // QUERY TOOLING API DATAPOINTS
     const queryResults: { [key: string]: QueryResult[] } = {};
     for (const dataPoint of selectedDataPoints) {
         const query = buildQuery(dataPoint);
         const result = queryMetadata(query, (orgSummaryDirectory + '/' + dataPoint + '.csv'), orgAlias);
         queryResults[dataPoint] = result instanceof Array ? result : [];
-
     }
     return queryResults
 }
@@ -386,16 +455,13 @@ async function getOrgWideApexCoverage(path: string, orgAlias?: string): Promise<
     }
 }
 
-function calculateCodeLines(orgAlias?: string): {
+function calculateCodeLines(): {
     ApexClass: { Lang: string; Total: number; Comments: number; Code: number };
     ApexTrigger: { Lang: string; Total: number; Comments: number; Code: number };
     AuraDefinitionBundle: { Lang: string; Total: number; Comments: number; Code: number };
     LightningComponentBundle: { Lang: string; Total: number; Comments: number; Code: number };
     StaticResource: { Lang: string; Total: number; Comments: number; Code: number };
 } {
-    const retrieveCommand = orgAlias ? `sf project retrieve start --metadata ApexClass ApexTrigger AuraDefinitionBundle LightningComponentBundle StaticResource --target-org ${orgAlias}` :
-        'sf project retrieve start --metadata ApexClass ApexTrigger AuraDefinitionBundle LightningComponentBundle StaticResource';
-    execSync(retrieveCommand, { encoding: 'utf8' });
     return {
         ApexClass: countCodeLines('./force-app/main/default/classes', '.cls', 'apex'),
         ApexTrigger: countCodeLines('./force-app/main/default/triggers', '.trigger', 'apex'),
@@ -457,4 +523,66 @@ function getOrgInfo(orgAlias?: string): OrgInfo {
         instanceUrl: '',
         orgId: ''
     }
+}
+
+interface PreprocessedResult {
+    Extension: string;
+    Technology: string;
+    MetadataType: string;
+    Component: string;
+    Row: ResultRow;
+}
+
+interface ResultRow {
+    Problem: string;
+    Severity: string;
+    NormalizedSeverity: string;
+    File: string;
+    Line: string;
+    Column: string;
+    Rule: string;
+    Description: string;
+    URL: string;
+    Category: string;
+    Engine: string;
+}
+
+export function preprocessResults() {
+    const scanResultsPath = './CLIScannerResults.csv';
+    const results = readCsvFile(scanResultsPath);
+    return results;
+}
+
+export function filterApexResults(preprocessedResults: PreprocessedResult[]): PreprocessedResult[] {
+    return preprocessedResults.filter(
+        (result) => result.Extension === 'cls' || result.Extension === 'trigger'
+    );
+}
+
+export function filterJavaScriptResults(preprocessedResults: PreprocessedResult[]): PreprocessedResult[] {
+    return preprocessedResults.filter((result) => result.Extension === 'js');
+}
+
+function readCsvFile(filePath: string) {
+    const fileContent = fs.readFileSync(filePath, 'utf8');
+    const lines = fileContent.split('\n');
+
+    const headers = lines.shift()?.split(',');
+    const headerNames: string[] = headers?.map(header => header.replace(/"/g, '').trim()) || [];
+
+    const results = [];
+    for (const line of lines) {
+        const values = line.split(',');
+        const newValues: any[] = values.map(value => value.replace(/"/g, '').trim());
+
+        const result = {};
+
+        // Map values to corresponding column names
+        headerNames.forEach((header, index) => {
+            result[header] = newValues[index];
+        });
+        results.push(result);
+    }
+
+    return results;
 }
