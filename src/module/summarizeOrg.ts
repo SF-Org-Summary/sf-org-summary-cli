@@ -17,11 +17,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { execSync } from 'node:child_process';
 import fs = require('fs');
-import path = require('path');
 import axios from 'axios';
 import * as fse from 'fs-extra';
 import parse = require('csv-parse/lib/sync');
-import { ApexClassCoverage, ComponentSummary, HealthCheckRisk, HealthCheckSummary, Limit, OrgSummary } from '../models/summary';
+import { ApexClassCoverage, CodeDetails, ComponentSummary, HealthCheckRisk, HealthCheckSummary, Limit, OrgSummary, ProblemInfo } from '../models/summary';
 import { countCodeLines } from '../libs/CountCodeLines';
 import { calculateFlowCoverage, calculateFlowOrgWideCoverage } from '../libs/GetFlowCoverage';
 import { dataPoints } from '../data/DataPoints';
@@ -31,7 +30,7 @@ export interface flags {
     nohealthcheck?: boolean;
     keepdata?: boolean;
     nolimits?: boolean;
-    noscan?: boolean;
+    nocodeanalysis?: boolean;
     notests?: boolean;
     nocodelines?: boolean;
     targetusername?: string;
@@ -47,8 +46,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     const keepData = flags.keepdata ? flags.keepdata : false;
     const noLimits = flags.nolimits ? flags.nolimits : false;
     const noTests = flags.notests ? flags.notests : false;
-    const noLinesOfCode = flags.nocodelines ? flags.nocodelines : false;
-    const noScan = flags.noscan ? flags.noscan : false;
+    const noCodeAnalysis = flags.nocodeanalysis ? flags.nocodeanalysis : false;
     const selectedDataPoints = flags.components ? flags.components.split(',') : dataPoints;
     const errors: any[] = [];
 
@@ -69,8 +67,8 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     console.log(initialMessage);
 
     const baseSummary: OrgSummary = {
+        DateOfSummary: currentDate,
         Timestamp: timestamp,
-        SummaryDate: currentDate,
         ResultState: 'Pending',
         OrgId: info.orgId,
         Username: info.username,
@@ -117,7 +115,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
         }
     }
 
-    if (!noScan) {
+    if (!noCodeAnalysis) {
         try {
             process.chdir(orgSummaryDirectory);
             execSync('sfdx force:project:create -x -n tempSFDXProject');
@@ -128,13 +126,11 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
             console.log('Running CLI scanner...');
             execSync('sfdx scanner:run --target . --format csv --normalize-severity > CLIScannerResults.csv');
             const results = preprocessResults();
-            baseSummary.CodeAnalyzer = { 'Risks': results.length, 'Details': results };
             const codeLines = calculateCodeLines();
+            baseSummary.Code = { 'Risks': results.length, 'RiskDetails': results, 'LinesOfCode': (codeLines.Apex.Total + codeLines.JavaScript.Total), 'RisksPerLineRatio': results.length / (codeLines.Apex.Total + codeLines.JavaScript.Total), 'LineDetails': codeLines };
             process.chdir('../../../../');
-            baseSummary.LinesOfCode = codeLines;
-            // console.log('PreprocessedScanResult', results);
         } catch (error) {
-            console.error('Error running Code Summary:', error.message);
+            console.error('Error running Code Analysis:', error.message);
             errors.push({ calculateLinesOfCodeError: error.message });
         }
     }
@@ -225,9 +221,6 @@ async function getApexClassCoverageDetails(path: string, orgAlias?: string): Pro
     try {
         const query = 'SELECT ApexClassOrTrigger.Name, NumLinesCovered, NumLinesUncovered FROM ApexCodeCoverageAggregate';
         const results = await queryMetadata(query, path + '/apexClassCoverageDetails.json', orgAlias);
-
-        console.log('getApexClassCoverageDetails', results);
-
         const coverageDetails: ApexClassCoverage[] = results.map((result: any) => ({
             Class: result['ApexClassOrTrigger.Name'] || 'N/A',
             CoveragePercentage: calculateCoveragePercentage(result.NumLinesCovered, result.NumLinesUncovered)
@@ -455,21 +448,43 @@ async function getOrgWideApexCoverage(path: string, orgAlias?: string): Promise<
     }
 }
 
-function calculateCodeLines(): {
-    ApexClass: { Lang: string; Total: number; Comments: number; Code: number };
-    ApexTrigger: { Lang: string; Total: number; Comments: number; Code: number };
-    AuraDefinitionBundle: { Lang: string; Total: number; Comments: number; Code: number };
-    LightningComponentBundle: { Lang: string; Total: number; Comments: number; Code: number };
-    StaticResource: { Lang: string; Total: number; Comments: number; Code: number };
-} {
+function calculateCodeLines(): CodeDetails {
+
+    const apexClassCL = countCodeLines('./force-app/main/default/classes', '.cls', 'apex');
+    const apexTriggerCL = countCodeLines('./force-app/main/default/triggers', '.trigger', 'apex');
+    const AuraDefinitionBundleCL = countCodeLines('./force-app/main/default/aura', '.js', 'javascript');
+    const LightningComponentBundleCL = countCodeLines('./force-app/main/default/lwc', '.js', 'javascript');
+    const StaticResourceCL = countCodeLines('./force-app/main/default/staticresources', '.js', 'javascript');
+    const ApexTotal = apexClassCL.Total + apexTriggerCL.Total;
+    const ApexComments = apexClassCL.Comments + apexTriggerCL.Comments;
+    const ApexCode = apexClassCL.Code + apexTriggerCL.Code;
+    const JavaScriptTotal = AuraDefinitionBundleCL.Total + LightningComponentBundleCL.Total + StaticResourceCL.Total;
+    const JavaScriptComments = AuraDefinitionBundleCL.Comments + LightningComponentBundleCL.Comments + StaticResourceCL.Comments;
+    const JavaScriptCode = AuraDefinitionBundleCL.Code + LightningComponentBundleCL.Code + StaticResourceCL.Code;
+
     return {
-        ApexClass: countCodeLines('./force-app/main/default/classes', '.cls', 'apex'),
-        ApexTrigger: countCodeLines('./force-app/main/default/triggers', '.trigger', 'apex'),
-        AuraDefinitionBundle: countCodeLines('./force-app/main/default/aura', '.js', 'javascript'),
-        LightningComponentBundle: countCodeLines('./force-app/main/default/lwc', '.js', 'javascript'),
-        StaticResource: countCodeLines('./force-app/main/default/lwc', '.js', 'javascript')
+        Apex: {
+            Total: ApexTotal,
+            Comments: ApexComments,
+            Code: ApexCode,
+            Details: {
+                ApexClass: apexClassCL,
+                ApexTrigger: apexTriggerCL,
+            },
+        },
+        JavaScript: {
+            Total: JavaScriptTotal,
+            Comments: JavaScriptComments,
+            Code: JavaScriptCode,
+            Details: {
+                AuraDefinitionBundle: AuraDefinitionBundleCL,
+                LightningComponentBundle: LightningComponentBundleCL,
+                StaticResource: StaticResourceCL,
+            },
+        },
     };
 }
+
 
 interface QueryResult {
     attributes: {
@@ -547,7 +562,7 @@ interface ResultRow {
     Engine: string;
 }
 
-export function preprocessResults() {
+export function preprocessResults(): ProblemInfo[] {
     const scanResultsPath = './CLIScannerResults.csv';
     const results = readCsvFile(scanResultsPath);
     return results;
@@ -563,23 +578,22 @@ export function filterJavaScriptResults(preprocessedResults: PreprocessedResult[
     return preprocessedResults.filter((result) => result.Extension === 'js');
 }
 
-function readCsvFile(filePath: string) {
+function readCsvFile(filePath: string): ProblemInfo[] {
     const fileContent = fs.readFileSync(filePath, 'utf8');
     const lines = fileContent.split('\n');
 
     const headers = lines.shift()?.split(',');
-    const headerNames: string[] = headers?.map(header => header.replace(/"/g, '').trim()) || [];
+    const headerNames: string[] = headers?.map(header => header.replace(/"/g, '').trim()) ?? [];
 
-    const results = [];
+    const results: ProblemInfo[] = [];
     for (const line of lines) {
         const values = line.split(',');
         const newValues: any[] = values.map(value => value.replace(/"/g, '').trim());
-
-        const result = {};
-
+        const result: ProblemInfo = {} as ProblemInfo;
         // Map values to corresponding column names
         headerNames.forEach((header, index) => {
-            result[header] = newValues[index];
+            // Use type assertion here, assuming your values match the ProblemInfo type
+            result[header as keyof ProblemInfo] = newValues[index];
         });
         results.push(result);
     }

@@ -1,7 +1,6 @@
 # SF Org Summary
 
-## Overview
-SF Org Summary is a Salesforce CLI plugin designed to provide a comprehensive summary of your Salesforce Org instance(s). It offers insights into your Org's key metadata, test results, code line metrics, usage of limit related resources and more, helping you understand and monitor your Salesforce environment.
+SF Org Summary is a Salesforce CLI plugin designed to provide a comprehensive summary of your Salesforce Org instance(s). It offers insights into your Org's key metadata, test results, code line metrics, usage of limit-related resources, linter results and more, helping you understand and monitor your Salesforce environment.
 
 ## Features
 
@@ -9,9 +8,11 @@ SF Org Summary is a Salesforce CLI plugin designed to provide a comprehensive su
 
 - **Tests Summary:** Run Apex tests and analyze the health of your codebase. Evaluate the overall test coverage of your Apex code and Flows.
 
-- **Lines of Code Summary:** Measure the lines of code in your Apex Classes, Triggers, Aura Components, Lightning Web Components, and Static Resources. Breakdown includes total lines, comments, and actual code lines.
-
 - **Org Limits Overview:** Fetch actual usage related to Salesforce Org limits to ensure you stay within the allowed thresholds.
+
+- **Code Analyzer:** Identify and analyze potential risks in your codebase. Receive insights into various aspects such as severity, file location, and suggested improvements. Also measures the lines of code in your Apex Classes, Triggers, Aura Components, Lightning Web Components, and Static Resources to put the amount of issues into context by calculating the average amount of issues per line of code. The breakdown of lines of code includes total lines, comments, and actual code lines.
+
+- **Health Check Score:** Assess the health of your Salesforce instance with a comprehensive health check score. Understand the amount of open risks versus compliance, and detailed get information about security-related settings.
 
 ## Installation
 
@@ -33,7 +34,7 @@ sfdx summarize:org [flags]
     -g, --nohealthcheck: Skip fetching and displaying Salesforce Health Check Score and Risks.
     -k, --keepdata: Keep the intermediate data files generated during the summary process.
     -l, --nolimits: Skip fetching and displaying Salesforce Org limits.
-    -n, --nocodelines: Skip counting lines of code.
+    -s, --nocodeanalysis: Skip counting lines of code.
     -t, --notests: Skip running Apex tests during the summary.
     -u, --targetusername <username>: Specify the target Salesforce Org username.
 

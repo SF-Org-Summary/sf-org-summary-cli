@@ -1,5 +1,5 @@
 export type OrgSummary = {
-  SummaryDate: string;
+  DateOfSummary: string;
   Timestamp: string;
   ResultState: string;
   OrgId: string;
@@ -7,8 +7,7 @@ export type OrgSummary = {
   Username: string;
 } & Partial<{
   Components: { [key: string]: ComponentSummary };
-  CodeAnalyzer: CodeAnalyzer;
-  LinesOfCode: { [key: string]: LinesOfCode };
+  Code: CodeAnalysis;
   HealthCheck: HealthCheckSummary;
   Limits: LimitSummary;
   Tests: TestSummary;
@@ -16,12 +15,37 @@ export type OrgSummary = {
   TestCoverageFlow: TestCoverageFlow;
 }>;
 
-export interface CodeAnalyzer {
+export interface CodeAnalysis {
+  LinesOfCode: number;
   Risks: number | 'N/A';
-  Details: ProblemInfo[];
+  RisksPerLineRatio: number;
+  LineDetails: CodeDetails;
+  RiskDetails: ProblemInfo[];
 }
 
-interface ProblemInfo {
+export interface CodeDetails {
+  Apex: {
+    Total: number;
+    Comments: number;
+    Code: number;
+    Details: {
+      ApexClass: { Total: number; Comments: number; Code: number };
+      ApexTrigger: { Total: number; Comments: number; Code: number };
+    };
+  };
+  JavaScript: {
+    Total: number;
+    Comments: number;
+    Code: number;
+    Details: {
+      AuraDefinitionBundle: { Total: number; Comments: number; Code: number };
+      LightningComponentBundle: { Total: number; Comments: number; Code: number };
+      StaticResource: { Total: number; Comments: number; Code: number };
+    };
+  };
+}
+
+export interface ProblemInfo {
   Problem: string;
   Severity: string;
   'Normalized Severity': string;

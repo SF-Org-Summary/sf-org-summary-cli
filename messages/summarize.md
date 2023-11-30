@@ -62,11 +62,11 @@ Keep Data Files
 
 Keep Data Files
 
-# flags.noscan.description
+# flags.nocodeanalysis.description
 
 Keep Data Files
 
-# flags.noscan.summary
+# flags.nocodeanalysis.summary
 
 Keep Data Files
 
