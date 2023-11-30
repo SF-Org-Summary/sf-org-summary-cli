@@ -17,6 +17,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { execSync } from 'node:child_process';
 import fs = require('fs');
+import path = require('path');
 import axios from 'axios';
 import * as fse from 'fs-extra';
 import parse = require('csv-parse/lib/sync');
@@ -30,6 +31,7 @@ export interface flags {
     nohealthcheck?: boolean;
     keepdata?: boolean;
     nolimits?: boolean;
+    noscan?: boolean;
     notests?: boolean;
     nocodelines?: boolean;
     targetusername?: string;
@@ -46,6 +48,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     const noLimits = flags.nolimits ? flags.nolimits : false;
     const noTests = flags.notests ? flags.notests : false;
     const noLinesOfCode = flags.nocodelines ? flags.nocodelines : false;
+    const noScan = flags.noscan ? flags.noscan : false;
     const selectedDataPoints = flags.components ? flags.components.split(',') : dataPoints;
     const errors: any[] = [];
 
@@ -114,18 +117,24 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
         }
     }
 
-    if (!noLinesOfCode) {
-        console.log('Calculating lines of code...');
+    if (!noScan) {
         try {
             process.chdir(orgSummaryDirectory);
             execSync('sfdx force:project:create -x -n tempSFDXProject');
             process.chdir('./tempSFDXProject');
-            const codeLines = calculateCodeLines(orgAlias);
+            const retrieveCommand = orgAlias ? `sf project retrieve start --metadata ApexClass ApexTrigger AuraDefinitionBundle LightningComponentBundle StaticResource --target-org ${orgAlias}` :
+                'sf project retrieve start --metadata ApexClass ApexTrigger AuraDefinitionBundle LightningComponentBundle StaticResource';
+            execSync(retrieveCommand, { encoding: 'utf8' });
+            console.log('Running CLI scanner...');
+            execSync('sfdx scanner:run --target . --format csv --normalize-severity > CLIScannerResults.csv');
+            const results = preprocessResults();
+            baseSummary.CodeAnalyzer = { 'Risks': results.length, 'Details': results };
+            const codeLines = calculateCodeLines();
             process.chdir('../../../../');
             baseSummary.LinesOfCode = codeLines;
-            console.log('Lines of code calculated.');
+            // console.log('PreprocessedScanResult', results);
         } catch (error) {
-            console.error('Error calculating lines of code:', error.message);
+            console.error('Error running Code Summary:', error.message);
             errors.push({ calculateLinesOfCodeError: error.message });
         }
     }
@@ -446,16 +455,13 @@ async function getOrgWideApexCoverage(path: string, orgAlias?: string): Promise<
     }
 }
 
-function calculateCodeLines(orgAlias?: string): {
+function calculateCodeLines(): {
     ApexClass: { Lang: string; Total: number; Comments: number; Code: number };
     ApexTrigger: { Lang: string; Total: number; Comments: number; Code: number };
     AuraDefinitionBundle: { Lang: string; Total: number; Comments: number; Code: number };
     LightningComponentBundle: { Lang: string; Total: number; Comments: number; Code: number };
     StaticResource: { Lang: string; Total: number; Comments: number; Code: number };
 } {
-    const retrieveCommand = orgAlias ? `sf project retrieve start --metadata ApexClass ApexTrigger AuraDefinitionBundle LightningComponentBundle StaticResource --target-org ${orgAlias}` :
-        'sf project retrieve start --metadata ApexClass ApexTrigger AuraDefinitionBundle LightningComponentBundle StaticResource';
-    execSync(retrieveCommand, { encoding: 'utf8' });
     return {
         ApexClass: countCodeLines('./force-app/main/default/classes', '.cls', 'apex'),
         ApexTrigger: countCodeLines('./force-app/main/default/triggers', '.trigger', 'apex'),
@@ -517,4 +523,66 @@ function getOrgInfo(orgAlias?: string): OrgInfo {
         instanceUrl: '',
         orgId: ''
     }
+}
+
+interface PreprocessedResult {
+    Extension: string;
+    Technology: string;
+    MetadataType: string;
+    Component: string;
+    Row: ResultRow;
+}
+
+interface ResultRow {
+    Problem: string;
+    Severity: string;
+    NormalizedSeverity: string;
+    File: string;
+    Line: string;
+    Column: string;
+    Rule: string;
+    Description: string;
+    URL: string;
+    Category: string;
+    Engine: string;
+}
+
+export function preprocessResults() {
+    const scanResultsPath = './CLIScannerResults.csv';
+    const results = readCsvFile(scanResultsPath);
+    return results;
+}
+
+export function filterApexResults(preprocessedResults: PreprocessedResult[]): PreprocessedResult[] {
+    return preprocessedResults.filter(
+        (result) => result.Extension === 'cls' || result.Extension === 'trigger'
+    );
+}
+
+export function filterJavaScriptResults(preprocessedResults: PreprocessedResult[]): PreprocessedResult[] {
+    return preprocessedResults.filter((result) => result.Extension === 'js');
+}
+
+function readCsvFile(filePath: string) {
+    const fileContent = fs.readFileSync(filePath, 'utf8');
+    const lines = fileContent.split('\n');
+
+    const headers = lines.shift()?.split(',');
+    const headerNames: string[] = headers?.map(header => header.replace(/"/g, '').trim()) || [];
+
+    const results = [];
+    for (const line of lines) {
+        const values = line.split(',');
+        const newValues: any[] = values.map(value => value.replace(/"/g, '').trim());
+
+        const result = {};
+
+        // Map values to corresponding column names
+        headerNames.forEach((header, index) => {
+            result[header] = newValues[index];
+        });
+        results.push(result);
+    }
+
+    return results;
 }

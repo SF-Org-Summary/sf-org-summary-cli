@@ -62,6 +62,14 @@ Keep Data Files
 
 Keep Data Files
 
+# flags.noscan.description
+
+Keep Data Files
+
+# flags.noscan.summary
+
+Keep Data Files
+
 # examples
 
 - <%= config.bin %> <%= command.id %>

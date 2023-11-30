@@ -7,6 +7,7 @@ export type OrgSummary = {
   Username: string;
 } & Partial<{
   Components: { [key: string]: ComponentSummary };
+  CodeAnalyzer: CodeAnalyzer;
   LinesOfCode: { [key: string]: LinesOfCode };
   HealthCheck: HealthCheckSummary;
   Limits: LimitSummary;
@@ -14,6 +15,25 @@ export type OrgSummary = {
   TestCoverageApex: TestCoverageApex;
   TestCoverageFlow: TestCoverageFlow;
 }>;
+
+export interface CodeAnalyzer {
+  Risks: number | 'N/A';
+  Details: ProblemInfo[];
+}
+
+interface ProblemInfo {
+  Problem: string;
+  Severity: string;
+  'Normalized Severity': string;
+  File: string;
+  Line: string;
+  Column: string;
+  Rule: string;
+  Description: string;
+  URL: string;
+  Category: string;
+  Engine: string;
+}
 
 export interface ComponentSummary {
   Total: number | 'N/A';
