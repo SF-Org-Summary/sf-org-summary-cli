@@ -152,17 +152,16 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
                     TestDuration: testResult?.runtime.toString() ?? 'N/A',
                     TestMethodsCompleted: testResult?.methodsCompleted ?? 0,
                     TestMethodsFailed: testResult?.methodsFailed ?? 0,
-                    TestOutcome: testResult?.outcome ?? 'N/A'
+                    TestOutcome: testResult?.outcome ?? 'N/A',
+                    ApexTestCoverage: {
+                        'Total': orgWideApexCoverage ?? 0,
+                        'Details': await getApexClassCoverageDetails(orgSummaryDirectory, orgAlias),
+                    },
+                    FlowTestCoverage: {
+                        'Total': orgWideFlowCoverage ?? 0,
+                        'Details': []
+                    }
                 };
-                baseSummary.TestCoverageApex = {
-                    'Total': orgWideApexCoverage ?? 0,
-                    'Details': await getApexClassCoverageDetails(orgSummaryDirectory, orgAlias),
-                };
-                baseSummary.TestCoverageFlow = {
-                    'Total': orgWideFlowCoverage ?? 0,
-                    'Details': []
-                };
-
                 console.log('Apex tests completed successfully.');
             }
         } catch (error) {

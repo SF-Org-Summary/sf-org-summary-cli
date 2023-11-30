@@ -11,9 +11,17 @@ export type OrgSummary = {
   HealthCheck: HealthCheckSummary;
   Limits: LimitSummary;
   Tests: TestSummary;
-  TestCoverageApex: TestCoverageApex;
-  TestCoverageFlow: TestCoverageFlow;
 }>;
+
+export interface TestSummary {
+  ApexUnitTests: number;
+  TestDuration: string;
+  TestMethodsCompleted: number;
+  TestMethodsFailed: number;
+  TestOutcome: string;
+  ApexTestCoverage: TestCoverageApex;
+  FlowTestCoverage: TestCoverageFlow;
+}
 
 export interface CodeAnalysis {
   LinesOfCode: number;
@@ -122,10 +130,4 @@ export interface LinesOfCode {
   Code: number;
 }
 
-export interface TestSummary {
-  ApexUnitTests: number;
-  TestDuration: string;
-  TestMethodsCompleted: number;
-  TestMethodsFailed: number;
-  TestOutcome: string;
-}
+
