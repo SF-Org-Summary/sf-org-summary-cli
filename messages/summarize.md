@@ -61,6 +61,22 @@ Skips running the code analysis process during the summary.
 
 Skip Code Analysis
 
+# flags.nohealthcheck.summary
+
+Keep Data Files
+
+# flags.nohealthcheck.description
+
+Keep Data Files
+
+# flags.noscan.description
+
+Keep Data Files
+
+# flags.noscan.summary
+
+Keep Data Files
+
 # examples
 
 - <%= config.bin %> <%= command.id %>

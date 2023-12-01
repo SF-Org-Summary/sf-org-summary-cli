@@ -11,6 +11,8 @@ export type OrgSummary = {
   HealthCheck: HealthCheckSummary;
   Limits: LimitSummary;
   Tests: TestSummary;
+  TestCoverageApex: TestCoverageApex;
+  TestCoverageFlow: TestCoverageFlow;
 }>;
 
 export interface TestSummary {
@@ -128,6 +130,5 @@ export interface LinesOfCode {
   Total: number;
   Comments: number;
   Code: number;
-}
 
 
