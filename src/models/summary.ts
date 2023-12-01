@@ -80,7 +80,7 @@ export interface LimitSummary {
 }
 
 export interface FlowCoverage {
-  Flow: number | 'N/A';
+  Name: string | 'N/A';
   CoveragePercentage: number | 'N/A';
 }
 

@@ -1,18 +1,28 @@
 # SF Org Summary
 
-SF Org Summary is a Salesforce CLI plugin designed to provide a comprehensive summary of your Salesforce Org instance(s). It offers insights into your Org's key metadata, test results, code line metrics, usage of limit-related resources, linter results and more, helping you understand and monitor your Salesforce environment.
+SF Org Summary is a powerful Salesforce CLI plugin designed to provide a comprehensive overview of your Salesforce Org instance(s). This tool offers valuable insights into key metadata, test results, code metrics, usage of limit-related resources, linter results, and more, empowering you to better understand and monitor your Salesforce environment.
 
 ## Features
 
-- **Component Summary:** Utilize the Tooling API to aggregate and track metadata details. Get a quick overview of component totals, including the last modified date.
+### Component Summary
 
-- **Tests Summary:** Run Apex tests and analyze the health of your codebase. Evaluate the overall test coverage of your Apex code and Flows.
+Utilize the Tooling API to aggregate and track metadata details. Get a quick overview of component totals, including the last modified date.
 
-- **Org Limits Overview:** Fetch actual usage related to Salesforce Org limits to ensure you stay within the allowed thresholds.
+### Tests Summary
 
-- **Code Analyzer:** Identify and analyze potential risks in your codebase. Receive insights into various aspects such as severity, file location, and suggested improvements. Also measures the lines of code in your Apex Classes, Triggers, Aura Components, Lightning Web Components, and Static Resources to put the amount of issues into context by calculating the average amount of issues per line of code. The breakdown of lines of code includes total lines, comments, and actual code lines.
+Run Apex tests and analyze the health of your codebase. Evaluate the overall test coverage of your Apex code and Flows.
 
-- **Health Check Score:** Assess the health of your Salesforce instance with a comprehensive health check score. Understand the amount of open risks versus compliance, and detailed get information about security-related settings.
+### Org Limits Overview
+
+Fetch actual usage related to Salesforce Org limits to ensure you stay within the allowed thresholds.
+
+### Code Analyzer
+
+Identify and analyze potential risks in your codebase. Receive insights into various aspects such as severity, file location, and suggested improvements. The tool also measures the lines of code in your Apex Classes, Triggers, Aura Components, Lightning Web Components, and Static Resources, providing context by calculating the average amount of issues per line of code. The breakdown of lines of code includes total lines, comments, and actual code lines.
+
+### Health Check Score
+
+Assess the health of your Salesforce instance with a comprehensive health check score. Understand the amount of open risks versus compliance and receive detailed information about security-related settings.
 
 ## Installation
 

@@ -4,7 +4,7 @@ Get Org Summary
 
 # description
 
-Quickly gather essential information on Salesforce Org Instances including key metatdata, Apex test results, coverage- and code line calculations.
+Quickly gather valuable insights into key metadata, test results, code metrics, usage of limit-related resources, linter results, and more.
 
 # flags.targetusername.summary
 
@@ -12,7 +12,7 @@ Select Org
 
 # flags.targetusername.description
 
-Select Org
+Specifies the Salesforce Org username for which you want to generate the summary.
 
 # flags.notests.summary
 
@@ -20,15 +20,15 @@ Skip Apex Tests
 
 # flags.notests.description
 
-Skip Apex Tests
+Skips the execution of Apex tests during the summary process.
 
 # flags.components.summary
 
-Set DataPoints To Query
+Set Components To Query
 
 # flags.components.description
 
-Set DataPoints To Query
+Specifies the data points (components) to include in the summary. Use commas to separate multiple components.
 
 # flags.keepdata.summary
 
@@ -36,39 +36,30 @@ Keep Data Files
 
 # flags.keepdata.description
 
-Keep Data Files
+ Retains the intermediate data files generated during the summary process.
 
 # flags.nolimits.summary
 
-Keep Data Files
+Display Org Limits
 
 # flags.nolimits.description
 
-Keep Data Files
-
-# flags.nocodelines.summary
-
-Keep Data Files
-
-# flags.nocodelines.description
-
-Keep Data Files
+Skips fetching and displaying Salesforce Org limits during the summary process.
 
 # flags.nohealthcheck.summary
 
-Keep Data Files
+Skip Health Check
 
 # flags.nohealthcheck.description
 
-Keep Data Files
+Skips fetching and displaying Salesforce Health Check Score and Risks during the summary process.
 
 # flags.nocodeanalysis.description
-
-Keep Data Files
+Skips running the code analysis process during the summary.
 
 # flags.nocodeanalysis.summary
 
-Keep Data Files
+Skip Code Analysis
 
 # examples
 

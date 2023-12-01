@@ -20,9 +20,8 @@ import fs = require('fs');
 import axios from 'axios';
 import * as fse from 'fs-extra';
 import parse = require('csv-parse/lib/sync');
-import { ApexClassCoverage, CodeDetails, ComponentSummary, HealthCheckRisk, HealthCheckSummary, Limit, OrgSummary, ProblemInfo } from '../models/summary';
+import { ApexClassCoverage, CodeDetails, ComponentSummary, FlowCoverage, HealthCheckRisk, HealthCheckSummary, Limit, OrgSummary, ProblemInfo } from '../models/summary';
 import { countCodeLines } from '../libs/CountCodeLines';
-import { calculateFlowCoverage, calculateFlowOrgWideCoverage } from '../libs/GetFlowCoverage';
 import { dataPoints } from '../data/DataPoints';
 
 export interface flags {
@@ -146,7 +145,8 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
                 await pollTestRunResult(testRunId, orgSummaryDirectory, orgAlias);
                 const testResult = await getTestRunDetails(testRunId, orgSummaryDirectory, orgAlias);
                 const orgWideApexCoverage = await getOrgWideApexCoverage(orgSummaryDirectory, orgAlias);
-                const orgWideFlowCoverage = calculateFlowOrgWideCoverage(calculateFlowCoverage(orgAlias));
+                const orgWideFlowCoverage = await getFlowCoveragePercentage(orgAlias);
+                const flowCoverageDetails = await getFlowCoverageDetails(orgAlias) as FlowCoverage[];
                 baseSummary.Tests = {
                     ApexUnitTests: testResult?.methodsCompleted ?? 0,
                     TestDuration: testResult?.runtime.toString() ?? 'N/A',
@@ -159,7 +159,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
                     },
                     FlowTestCoverage: {
                         'Total': orgWideFlowCoverage ?? 0,
-                        'Details': []
+                        'Details': flowCoverageDetails
                     }
                 };
                 console.log('Apex tests completed successfully.');
@@ -213,6 +213,57 @@ async function checkLimits(instanceURL: string, accessToken: string): Promise<Li
         console.error('Error fetching limits from Salesforce API:', error.message);
     }
     return limits;
+}
+
+async function getFlowCoverageDetails(orgAlias?: string): Promise<{ Name: string; CoveragePercentage: number }[]> {
+    try {
+        const flowCoverage = new GetFlowCoverage();
+        const flowDefinitionViews = new GetFlowDefinitionViews();
+
+        const coverageResult = await flowCoverage.getFlowCoverage(orgAlias);
+        const flowDefinitionsResult = await flowDefinitionViews.getFlowDefinitionViews(orgAlias);
+
+        if (coverageResult?.result && flowDefinitionsResult && flowDefinitionsResult.result.records.length > 0) {
+            const coverageRecords = coverageResult.result.records;
+            const flowDefinitions = flowDefinitionsResult.result.records;
+
+            return flowDefinitions.map(flowDef => {
+                const matchingCoverage = coverageRecords.find(coverage => coverage.FlowVersionId === flowDef.ActiveVersionId);
+                const coveragePercentage = matchingCoverage ? (matchingCoverage.NumElementsCovered / (matchingCoverage.NumElementsCovered + matchingCoverage.NumElementsNotCovered)) * 100 : 0;
+
+                return {
+                    Name: flowDef.Label,
+                    CoveragePercentage: coveragePercentage,
+                };
+            });
+        } else {
+            console.error('No flow coverage or flow definition records found.');
+            return [];
+        }
+    } catch (error) {
+        console.error('Error getting flow coverage details:', error.message);
+        return [];
+    }
+}
+
+async function getFlowCoveragePercentage(orgAlias?: string): Promise<number> {
+    try {
+        const flowCoverage = new GetFlowCoverage();
+        const coverageResult = await flowCoverage.getFlowCoverage(orgAlias);
+
+
+        if (coverageResult?.result && coverageResult.result.records.length > 0) {
+            const firstRecord = coverageResult.result.records[0];
+            const totalElements = firstRecord.NumElementsCovered + firstRecord.NumElementsNotCovered;
+            return totalElements > 0 ? (firstRecord.NumElementsCovered / totalElements) * 100 : 0;
+        } else {
+            console.error('No flow coverage records found.');
+            return 0;
+        }
+    } catch (error) {
+        console.error('Error getting flow coverage:', error.message);
+        return 0;
+    }
 }
 
 // Function to get details for each Apex class coverage
@@ -598,4 +649,84 @@ function readCsvFile(filePath: string): ProblemInfo[] {
     }
 
     return results;
+}
+
+export class GetFlowCoverage {
+    public async getFlowCoverage(username: string | undefined): Promise<CoverageResult> {
+        const command = 'sfdx force:data:soql:query -q "SELECT Id, ApexTestClassId, ' +
+            `TestMethodName, FlowVersionId, NumElementsCovered, NumElementsNotCovered FROM FlowTestCoverage" -u ${username} -t --json`;
+
+        return this.runSFDXCommand(command) as Promise<CoverageResult>;
+    }
+
+    private runSFDXCommand(command: string): Promise<any> {
+        return new Promise((resolve, reject) => {
+            try {
+                const result = execSync(command, { encoding: 'utf-8' });
+                resolve(JSON.parse(result));
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+}
+
+export class GetFlowDefinitionViews {
+    public async getFlowDefinitionViews(username: string | undefined): Promise<FlowDefinitionViewResult> {
+        const command = 'sfdx force:data:soql:query -q "SELECT ApiName, InstalledPackageName, ' +
+            `ActiveVersionId, Label FROM FlowDefinitionView WHERE IsActive = true" -u ${username} --json`;
+
+        return this.runSFDXCommand(command) as Promise<FlowDefinitionViewResult>;
+    }
+
+    private runSFDXCommand(command: string): Promise<any> {
+        return new Promise((resolve, reject) => {
+            try {
+                const result = execSync(command, { encoding: 'utf-8' });
+                resolve(JSON.parse(result));
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+}
+
+export interface FlowCoverageRecord {
+    type: string;
+    url: string;
+    Id: string;
+    ApexTestClassId: string;
+    TestMethodName: string;
+    FlowVersionId: string;
+    NumElementsCovered: number;
+    NumElementsNotCovered: number;
+}
+
+export interface CoverageResult {
+    status: number;
+    result: {
+        done: boolean;
+        totalSize: number;
+        records: FlowCoverageRecord[];
+    };
+}
+
+export interface FlowDefinitionViewRecord {
+    attributes: {
+        type: string;
+        url: string;
+    };
+    ApiName: string;
+    InstalledPackageName: string;
+    ActiveVersionId: string;
+    Label: string;
+}
+
+export interface FlowDefinitionViewResult {
+    status: number;
+    result: {
+        done: boolean;
+        totalSize: number;
+        records: FlowDefinitionViewRecord[];
+    };
 }
