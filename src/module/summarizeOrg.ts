@@ -21,9 +21,8 @@ import path = require('path');
 import axios from 'axios';
 import * as fse from 'fs-extra';
 import parse = require('csv-parse/lib/sync');
-import { ApexClassCoverage, ComponentSummary, HealthCheckRisk, HealthCheckSummary, Limit, OrgSummary } from '../models/summary';
+import { ApexClassCoverage, CodeDetails, ComponentSummary, FlowCoverage, HealthCheckRisk, HealthCheckSummary, Limit, OrgSummary, ProblemInfo } from '../models/summary';
 import { countCodeLines } from '../libs/CountCodeLines';
-import { calculateFlowCoverage, calculateFlowOrgWideCoverage } from '../libs/GetFlowCoverage';
 import { dataPoints } from '../data/DataPoints';
 
 export interface flags {
@@ -31,7 +30,8 @@ export interface flags {
     nohealthcheck?: boolean;
     keepdata?: boolean;
     nolimits?: boolean;
-    noscan?: boolean;
+
+    nocodeanalysis?: boolean;
     notests?: boolean;
     nocodelines?: boolean;
     targetusername?: string;
@@ -47,8 +47,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     const keepData = flags.keepdata ? flags.keepdata : false;
     const noLimits = flags.nolimits ? flags.nolimits : false;
     const noTests = flags.notests ? flags.notests : false;
-    const noLinesOfCode = flags.nocodelines ? flags.nocodelines : false;
-    const noScan = flags.noscan ? flags.noscan : false;
+    const noCodeAnalysis = flags.nocodeanalysis ? flags.nocodeanalysis : false;
     const selectedDataPoints = flags.components ? flags.components.split(',') : dataPoints;
     const errors: any[] = [];
 
@@ -69,8 +68,8 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
     console.log(initialMessage);
 
     const baseSummary: OrgSummary = {
+        DateOfSummary: currentDate,
         Timestamp: timestamp,
-        SummaryDate: currentDate,
         ResultState: 'Pending',
         OrgId: info.orgId,
         Username: info.username,
@@ -117,7 +116,7 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
         }
     }
 
-    if (!noScan) {
+    if (!noCodeAnalysis) {
         try {
             process.chdir(orgSummaryDirectory);
             execSync('sfdx force:project:create -x -n tempSFDXProject');
@@ -128,13 +127,11 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
             console.log('Running CLI scanner...');
             execSync('sfdx scanner:run --target . --format csv --normalize-severity > CLIScannerResults.csv');
             const results = preprocessResults();
-            baseSummary.CodeAnalyzer = { 'Risks': results.length, 'Details': results };
             const codeLines = calculateCodeLines();
+            baseSummary.Code = { 'Risks': results.length, 'RiskDetails': results, 'LinesOfCode': (codeLines.Apex.Total + codeLines.JavaScript.Total), 'RisksPerLineRatio': results.length / (codeLines.Apex.Total + codeLines.JavaScript.Total), 'LineDetails': codeLines };
             process.chdir('../../../../');
-            baseSummary.LinesOfCode = codeLines;
-            // console.log('PreprocessedScanResult', results);
         } catch (error) {
-            console.error('Error running Code Summary:', error.message);
+            console.error('Error running Code Analysis:', error.message);
             errors.push({ calculateLinesOfCodeError: error.message });
         }
     }
@@ -150,17 +147,21 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
                 await pollTestRunResult(testRunId, orgSummaryDirectory, orgAlias);
                 const testResult = await getTestRunDetails(testRunId, orgSummaryDirectory, orgAlias);
                 const orgWideApexCoverage = await getOrgWideApexCoverage(orgSummaryDirectory, orgAlias);
-                const orgWideFlowCoverage = calculateFlowOrgWideCoverage(calculateFlowCoverage(orgAlias));
+                const orgWideFlowCoverage = await getFlowCoveragePercentage(orgAlias);
+                const flowCoverageDetails = await getFlowCoverageDetails(orgAlias) as FlowCoverage[];
                 baseSummary.Tests = {
                     ApexUnitTests: testResult?.methodsCompleted ?? 0,
                     TestDuration: testResult?.runtime.toString() ?? 'N/A',
                     TestMethodsCompleted: testResult?.methodsCompleted ?? 0,
                     TestMethodsFailed: testResult?.methodsFailed ?? 0,
-                    TestOutcome: testResult?.outcome ?? 'N/A'
-                };
-                baseSummary.TestCoverageApex = {
-                    'Total': orgWideApexCoverage ?? 0,
-                    'Details': await getApexClassCoverageDetails(orgSummaryDirectory, orgAlias),
+                    TestOutcome: testResult?.outcome ?? 'N/A',
+                    ApexTestCoverage: {
+                        'Total': orgWideApexCoverage ?? 0,
+                        'Details': await getApexClassCoverageDetails(orgSummaryDirectory, orgAlias),
+                    },
+                    FlowTestCoverage: {
+                        'Total': orgWideFlowCoverage ?? 0,
+                        'Details': flowCoverageDetails
                 };
                 baseSummary.TestCoverageFlow = {
                     'Total': orgWideFlowCoverage ?? 0,
@@ -220,23 +221,54 @@ async function checkLimits(instanceURL: string, accessToken: string): Promise<Li
     return limits;
 }
 
-// Function to get details for each Apex class coverage
-async function getApexClassCoverageDetails(path: string, orgAlias?: string): Promise<ApexClassCoverage[]> {
+async function getFlowCoverageDetails(orgAlias?: string): Promise<{ Name: string; CoveragePercentage: number }[]> {
     try {
-        const query = 'SELECT ApexClassOrTrigger.Name, NumLinesCovered, NumLinesUncovered FROM ApexCodeCoverageAggregate';
-        const results = await queryMetadata(query, path + '/apexClassCoverageDetails.json', orgAlias);
+        const flowCoverage = new GetFlowCoverage();
+        const flowDefinitionViews = new GetFlowDefinitionViews();
 
-        console.log('getApexClassCoverageDetails', results);
+        const coverageResult = await flowCoverage.getFlowCoverage(orgAlias);
+        const flowDefinitionsResult = await flowDefinitionViews.getFlowDefinitionViews(orgAlias);
 
-        const coverageDetails: ApexClassCoverage[] = results.map((result: any) => ({
-            Class: result['ApexClassOrTrigger.Name'] || 'N/A',
-            CoveragePercentage: calculateCoveragePercentage(result.NumLinesCovered, result.NumLinesUncovered)
-        }));
+        if (coverageResult?.result && flowDefinitionsResult && flowDefinitionsResult.result.records.length > 0) {
+            const coverageRecords = coverageResult.result.records;
+            const flowDefinitions = flowDefinitionsResult.result.records;
 
-        return coverageDetails;
+            return flowDefinitions.map(flowDef => {
+                const matchingCoverage = coverageRecords.find(coverage => coverage.FlowVersionId === flowDef.ActiveVersionId);
+                const coveragePercentage = matchingCoverage ? (matchingCoverage.NumElementsCovered / (matchingCoverage.NumElementsCovered + matchingCoverage.NumElementsNotCovered)) * 100 : 0;
+
+                return {
+                    Name: flowDef.Label,
+                    CoveragePercentage: coveragePercentage,
+                };
+            });
+        } else {
+            console.error('No flow coverage or flow definition records found.');
+            return [];
+        }
     } catch (error) {
-        console.error('Error getting Apex class coverage details:', error.message);
+        console.error('Error getting flow coverage details:', error.message);
         return [];
+    }
+}
+
+async function getFlowCoveragePercentage(orgAlias?: string): Promise<number> {
+    try {
+        const flowCoverage = new GetFlowCoverage();
+        const coverageResult = await flowCoverage.getFlowCoverage(orgAlias);
+
+
+        if (coverageResult?.result && coverageResult.result.records.length > 0) {
+            const firstRecord = coverageResult.result.records[0];
+            const totalElements = firstRecord.NumElementsCovered + firstRecord.NumElementsNotCovered;
+            return totalElements > 0 ? (firstRecord.NumElementsCovered / totalElements) * 100 : 0;
+        } else {
+            console.error('No flow coverage records found.');
+            return 0;
+        }
+    } catch (error) {
+        console.error('Error getting flow coverage:', error.message);
+        return 0;
     }
 }
 
@@ -455,21 +487,43 @@ async function getOrgWideApexCoverage(path: string, orgAlias?: string): Promise<
     }
 }
 
-function calculateCodeLines(): {
-    ApexClass: { Lang: string; Total: number; Comments: number; Code: number };
-    ApexTrigger: { Lang: string; Total: number; Comments: number; Code: number };
-    AuraDefinitionBundle: { Lang: string; Total: number; Comments: number; Code: number };
-    LightningComponentBundle: { Lang: string; Total: number; Comments: number; Code: number };
-    StaticResource: { Lang: string; Total: number; Comments: number; Code: number };
-} {
+function calculateCodeLines(): CodeDetails {
+
+    const apexClassCL = countCodeLines('./force-app/main/default/classes', '.cls', 'apex');
+    const apexTriggerCL = countCodeLines('./force-app/main/default/triggers', '.trigger', 'apex');
+    const AuraDefinitionBundleCL = countCodeLines('./force-app/main/default/aura', '.js', 'javascript');
+    const LightningComponentBundleCL = countCodeLines('./force-app/main/default/lwc', '.js', 'javascript');
+    const StaticResourceCL = countCodeLines('./force-app/main/default/staticresources', '.js', 'javascript');
+    const ApexTotal = apexClassCL.Total + apexTriggerCL.Total;
+    const ApexComments = apexClassCL.Comments + apexTriggerCL.Comments;
+    const ApexCode = apexClassCL.Code + apexTriggerCL.Code;
+    const JavaScriptTotal = AuraDefinitionBundleCL.Total + LightningComponentBundleCL.Total + StaticResourceCL.Total;
+    const JavaScriptComments = AuraDefinitionBundleCL.Comments + LightningComponentBundleCL.Comments + StaticResourceCL.Comments;
+    const JavaScriptCode = AuraDefinitionBundleCL.Code + LightningComponentBundleCL.Code + StaticResourceCL.Code;
+ {
     return {
-        ApexClass: countCodeLines('./force-app/main/default/classes', '.cls', 'apex'),
-        ApexTrigger: countCodeLines('./force-app/main/default/triggers', '.trigger', 'apex'),
-        AuraDefinitionBundle: countCodeLines('./force-app/main/default/aura', '.js', 'javascript'),
-        LightningComponentBundle: countCodeLines('./force-app/main/default/lwc', '.js', 'javascript'),
-        StaticResource: countCodeLines('./force-app/main/default/lwc', '.js', 'javascript')
+        Apex: {
+            Total: ApexTotal,
+            Comments: ApexComments,
+            Code: ApexCode,
+            Details: {
+                ApexClass: apexClassCL,
+                ApexTrigger: apexTriggerCL,
+            },
+        },
+        JavaScript: {
+            Total: JavaScriptTotal,
+            Comments: JavaScriptComments,
+            Code: JavaScriptCode,
+            Details: {
+                AuraDefinitionBundle: AuraDefinitionBundleCL,
+                LightningComponentBundle: LightningComponentBundleCL,
+                StaticResource: StaticResourceCL,
+            },
+        },
     };
 }
+
 
 interface QueryResult {
     attributes: {
@@ -547,7 +601,7 @@ interface ResultRow {
     Engine: string;
 }
 
-export function preprocessResults() {
+export function preprocessResults(): ProblemInfo[] {
     const scanResultsPath = './CLIScannerResults.csv';
     const results = readCsvFile(scanResultsPath);
     return results;
@@ -563,26 +617,100 @@ export function filterJavaScriptResults(preprocessedResults: PreprocessedResult[
     return preprocessedResults.filter((result) => result.Extension === 'js');
 }
 
-function readCsvFile(filePath: string) {
-    const fileContent = fs.readFileSync(filePath, 'utf8');
-    const lines = fileContent.split('\n');
+function readCsvFile(filePath: string): ProblemInfo[] {
+    const headerNames: string[] = headers?.map(header => header.replace(/"/g, '').trim()) ?? [];
 
-    const headers = lines.shift()?.split(',');
-    const headerNames: string[] = headers?.map(header => header.replace(/"/g, '').trim()) || [];
-
-    const results = [];
+    const results: ProblemInfo[] = [];
     for (const line of lines) {
         const values = line.split(',');
         const newValues: any[] = values.map(value => value.replace(/"/g, '').trim());
-
-        const result = {};
-
+        const result: ProblemInfo = {} as ProblemInfo;
         // Map values to corresponding column names
         headerNames.forEach((header, index) => {
-            result[header] = newValues[index];
+            // Use type assertion here, assuming your values match the ProblemInfo type
         });
         results.push(result);
     }
 
     return results;
+}
+
+export class GetFlowCoverage {
+    public async getFlowCoverage(username: string | undefined): Promise<CoverageResult> {
+        const command = 'sfdx force:data:soql:query -q "SELECT Id, ApexTestClassId, ' +
+            `TestMethodName, FlowVersionId, NumElementsCovered, NumElementsNotCovered FROM FlowTestCoverage" -u ${username} -t --json`;
+
+        return this.runSFDXCommand(command) as Promise<CoverageResult>;
+    }
+
+    private runSFDXCommand(command: string): Promise<any> {
+        return new Promise((resolve, reject) => {
+            try {
+                const result = execSync(command, { encoding: 'utf-8' });
+                resolve(JSON.parse(result));
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+}
+
+export class GetFlowDefinitionViews {
+    public async getFlowDefinitionViews(username: string | undefined): Promise<FlowDefinitionViewResult> {
+        const command = 'sfdx force:data:soql:query -q "SELECT ApiName, InstalledPackageName, ' +
+            `ActiveVersionId, Label FROM FlowDefinitionView WHERE IsActive = true" -u ${username} --json`;
+
+        return this.runSFDXCommand(command) as Promise<FlowDefinitionViewResult>;
+    }
+
+    private runSFDXCommand(command: string): Promise<any> {
+        return new Promise((resolve, reject) => {
+            try {
+                const result = execSync(command, { encoding: 'utf-8' });
+                resolve(JSON.parse(result));
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+}
+
+export interface FlowCoverageRecord {
+    type: string;
+    url: string;
+    Id: string;
+    ApexTestClassId: string;
+    TestMethodName: string;
+    FlowVersionId: string;
+    NumElementsCovered: number;
+    NumElementsNotCovered: number;
+}
+
+export interface CoverageResult {
+    status: number;
+    result: {
+        done: boolean;
+        totalSize: number;
+        records: FlowCoverageRecord[];
+    };
+}
+
+export interface FlowDefinitionViewRecord {
+    attributes: {
+        type: string;
+        url: string;
+    };
+    ApiName: string;
+    InstalledPackageName: string;
+    ActiveVersionId: string;
+    Label: string;
+}
+
+export interface FlowDefinitionViewResult {
+    status: number;
+    result: {
+        done: boolean;
+        totalSize: number;
+        records: FlowDefinitionViewRecord[];
+    };
 }

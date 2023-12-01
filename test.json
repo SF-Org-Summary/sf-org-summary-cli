@@ -1,0 +1,11 @@
+{
+  "status": 0,
+  "result": {
+    "records": [],
+    "totalSize": 0,
+    "done": true
+  },
+  "warnings": [
+    "The \"-u\" flag has been deprecated. Use \"--target-org | -o\" instead."
+  ]
+}
