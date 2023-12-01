@@ -16,9 +16,9 @@ Run Apex tests and analyze the health of your codebase. Evaluate the overall tes
 
 Fetch actual usage related to Salesforce Org limits to ensure you stay within the allowed thresholds.
 
-### Code Analyzer
+### Code Analysis
 
-Identify and analyze potential risks in your codebase. Receive insights into various aspects such as severity, file location, and suggested improvements. The tool also measures the lines of code in your Apex Classes, Triggers, Aura Components, Lightning Web Components, and Static Resources, providing context by calculating the average amount of issues per line of code. The breakdown of lines of code includes total lines, comments, and actual code lines.
+Identify and analyze potential risks in your codebase for Apex and JavaScript. Receive insights into various aspects such as severity, file location, and suggested improvements. The tool also measures the lines of code in your Apex Classes, Triggers, Aura Components, Lightning Web Components, and Static Resources, providing context by calculating the average amount of issues per line of code. The breakdown of lines of code includes total lines, comments, and actual code lines.
 
 ### Health Check Score
 
