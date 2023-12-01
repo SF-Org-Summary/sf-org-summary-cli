@@ -82,7 +82,7 @@ export interface LimitSummary {
 }
 
 export interface FlowCoverage {
-  Name: string | 'N/A';
+  Name: string;
   CoveragePercentage: number | 'N/A';
 }
 
@@ -130,5 +130,5 @@ export interface LinesOfCode {
   Total: number;
   Comments: number;
   Code: number;
-
+}
 
