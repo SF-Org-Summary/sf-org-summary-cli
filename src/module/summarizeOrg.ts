@@ -17,7 +17,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { execSync } from 'node:child_process';
 import fs = require('fs');
-import path = require('path');
 import axios from 'axios';
 import * as fse from 'fs-extra';
 import parse = require('csv-parse/lib/sync');
@@ -30,7 +29,6 @@ export interface flags {
     nohealthcheck?: boolean;
     keepdata?: boolean;
     nolimits?: boolean;
-
     nocodeanalysis?: boolean;
     notests?: boolean;
     nocodelines?: boolean;
@@ -162,12 +160,8 @@ export async function summarizeOrg(flags: flags): Promise<OrgSummary> {
                     FlowTestCoverage: {
                         'Total': orgWideFlowCoverage ?? 0,
                         'Details': flowCoverageDetails
+                    }
                 };
-                baseSummary.TestCoverageFlow = {
-                    'Total': orgWideFlowCoverage ?? 0,
-                    'Details': []
-                };
-
                 console.log('Apex tests completed successfully.');
             }
         } catch (error) {
@@ -269,6 +263,23 @@ async function getFlowCoveragePercentage(orgAlias?: string): Promise<number> {
     } catch (error) {
         console.error('Error getting flow coverage:', error.message);
         return 0;
+    }
+}
+
+// Function to get details for each Apex class coverage
+async function getApexClassCoverageDetails(path: string, orgAlias?: string): Promise<ApexClassCoverage[]> {
+    try {
+        const query = 'SELECT ApexClassOrTrigger.Name, NumLinesCovered, NumLinesUncovered FROM ApexCodeCoverageAggregate';
+        const results = await queryMetadata(query, path + '/apexClassCoverageDetails.json', orgAlias);
+        const coverageDetails: ApexClassCoverage[] = results.map((result: any) => ({
+            Name: result['ApexClassOrTrigger.Name'] || 'N/A',
+            CoveragePercentage: calculateCoveragePercentage(result.NumLinesCovered, result.NumLinesUncovered)
+        }));
+
+        return coverageDetails;
+    } catch (error) {
+        console.error('Error getting Apex class coverage details:', error.message);
+        return [];
     }
 }
 
@@ -500,7 +511,7 @@ function calculateCodeLines(): CodeDetails {
     const JavaScriptTotal = AuraDefinitionBundleCL.Total + LightningComponentBundleCL.Total + StaticResourceCL.Total;
     const JavaScriptComments = AuraDefinitionBundleCL.Comments + LightningComponentBundleCL.Comments + StaticResourceCL.Comments;
     const JavaScriptCode = AuraDefinitionBundleCL.Code + LightningComponentBundleCL.Code + StaticResourceCL.Code;
- {
+
     return {
         Apex: {
             Total: ApexTotal,
@@ -618,6 +629,10 @@ export function filterJavaScriptResults(preprocessedResults: PreprocessedResult[
 }
 
 function readCsvFile(filePath: string): ProblemInfo[] {
+    const fileContent = fs.readFileSync(filePath, 'utf8');
+    const lines = fileContent.split('\n');
+
+    const headers = lines.shift()?.split(',');
     const headerNames: string[] = headers?.map(header => header.replace(/"/g, '').trim()) ?? [];
 
     const results: ProblemInfo[] = [];
@@ -628,6 +643,7 @@ function readCsvFile(filePath: string): ProblemInfo[] {
         // Map values to corresponding column names
         headerNames.forEach((header, index) => {
             // Use type assertion here, assuming your values match the ProblemInfo type
+            result[header as keyof ProblemInfo] = newValues[index];
         });
         results.push(result);
     }

@@ -97,7 +97,7 @@ export interface TestCoverageApex {
 }
 
 export interface ApexClassCoverage {
-  Class: number | 'N/A';
+  Name: number | 'N/A';
   CoveragePercentage: number | 'N/A';
 }
 
