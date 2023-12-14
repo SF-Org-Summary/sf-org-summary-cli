@@ -6,8 +6,7 @@
     "@oclif/core": "^2.15.0",
     "@salesforce/core": "^5.3.20",
     "@salesforce/sf-plugins-core": "^5.0.1",
-    "axios": "^1.6.2",
-    "fs-extra": "^11.1.1",
+    "sf-org-summary-core": "^1.1.0",
     "tslib": "^2"
   },
   "devDependencies": {

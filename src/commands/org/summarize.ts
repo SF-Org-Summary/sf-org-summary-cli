@@ -9,8 +9,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
-import { summarizeOrg } from '../../module/summarizeOrg';
-import { OrgSummary } from '../../models/summary'
+import { OrgSummary } from 'sf-org-summary-core';
+import { summarize } from '../../module/summarizer';
 
 Messages.importMessagesDirectory(__dirname);
 const messages = Messages.loadMessages('sf-org-summary', 'summarize');
@@ -65,12 +65,11 @@ export default class Summarize extends SfCommand<OrgSummary> {
       description: messages.getMessage('flags.targetusername.description'),
       char: 'u',
       required: false,
-    })
+    }),
   };
 
   public async run(): Promise<OrgSummary> {
     const { flags } = await this.parse(Summarize);
-    return summarizeOrg(flags)
+    return summarize(flags);
   }
-
 }
