@@ -839,21 +839,21 @@
   version "0.11.0"
   resolved "https://registry.npmjs.org/@pkgjs/parseargs/-/parseargs-0.11.0.tgz"
 
-"@salesforce/cli-plugins-testkit@^4.4.7":
-  version "4.4.7"
-  resolved "https://registry.npmjs.org/@salesforce/cli-plugins-testkit/-/cli-plugins-testkit-4.4.7.tgz"
+"@salesforce/cli-plugins-testkit@^4.4.12":
+  version "4.4.12"
+  resolved "https://registry.yarnpkg.com/@salesforce/cli-plugins-testkit/-/cli-plugins-testkit-4.4.12.tgz#425132a4cd49b5aacb979df07af987b338ec00ae"
   dependencies:
-    "@salesforce/core" "^5.3.5"
-    "@salesforce/kit" "^3.0.13"
+    "@salesforce/core" "^5.3.10"
+    "@salesforce/kit" "^3.0.15"
     "@salesforce/ts-types" "^2.0.6"
-    "@types/shelljs" "^0.8.13"
+    "@types/shelljs" "^0.8.14"
     debug "^4.3.1"
     jszip "^3.10.1"
     shelljs "^0.8.4"
     strip-ansi "6.0.1"
     ts-retry-promise "^0.7.1"
 
-"@salesforce/core@^5.3.20", "@salesforce/core@^5.3.5":
+"@salesforce/core@^5.3.10", "@salesforce/core@^5.3.20":
   version "5.3.20"
   resolved "https://registry.npmjs.org/@salesforce/core/-/core-5.3.20.tgz"
   dependencies:
@@ -933,7 +933,7 @@
     typescript "^4.9.5"
     wireit "^0.14.1"
 
-"@salesforce/kit@^3.0.13", "@salesforce/kit@^3.0.15":
+"@salesforce/kit@^3.0.15":
   version "3.0.15"
   resolved "https://registry.npmjs.org/@salesforce/kit/-/kit-3.0.15.tgz"
   dependencies:
@@ -1220,9 +1220,9 @@
   version "7.5.5"
   resolved "https://registry.npmjs.org/@types/semver/-/semver-7.5.5.tgz"
 
-"@types/shelljs@^0.8.13":
-  version "0.8.13"
-  resolved "https://registry.npmjs.org/@types/shelljs/-/shelljs-0.8.13.tgz"
+"@types/shelljs@^0.8.14":
+  version "0.8.15"
+  resolved "https://registry.yarnpkg.com/@types/shelljs/-/shelljs-0.8.15.tgz#22c6ab9dfe05cec57d8e6cb1a95ea173aee9fcac"
   dependencies:
     "@types/glob" "~7.2.0"
     "@types/node" "*"
