@@ -1,12 +1,12 @@
 # summary
 
-Get Org Summary 
+Summary of a command.
 
 # description
 
-Quickly gather valuable insights into key metadata, test results, code metrics, usage of limit-related resources, linter results, and more.
+More information about a command. Don't repeat the summary. 
 
-# flagas.targetusername.summary
+# flags.targetusername.summary
 
 Select Org
 
