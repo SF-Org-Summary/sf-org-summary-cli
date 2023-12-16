@@ -1,9 +1,9 @@
 import { TestContext } from '@salesforce/core/lib/testSetup';
 import { expect } from 'chai';
 import { stubSfCommandUx } from '@salesforce/sf-plugins-core';
-import Summarize from '../../src/commands/org/summarize';
+import OrgsummaryUpload from '../../../src/commands/orgsummary/upload';
 
-describe('summarize', () => {
+describe('orgsummary upload', () => {
   const $$ = new TestContext();
   let sfCommandStubs: ReturnType<typeof stubSfCommandUx>;
 
@@ -16,7 +16,7 @@ describe('summarize', () => {
   });
 
   it('runs hello', async () => {
-    await Summarize.run([]);
+    await OrgsummaryUpload.run([]);
     const output = sfCommandStubs.log
       .getCalls()
       .flatMap((c) => c.args)
@@ -25,14 +25,12 @@ describe('summarize', () => {
   });
 
   it('runs hello with --json and no provided name', async () => {
-    const result = await Summarize.run([]);
-    expect(result.ResultState).to.equal(
-      'Completed'
-    );
+    const result = await OrgsummaryUpload.run([]);
+    expect(result.path).to.equal('/Users/rubenhalman/Projects/sf-org-summary/src/commands/orgsummary/upload.ts');
   });
 
   it('runs hello world --name Astro', async () => {
-    await Summarize.run(['--name', 'Astro']);
+    await OrgsummaryUpload.run(['--name', 'Astro']);
     const output = sfCommandStubs.log
       .getCalls()
       .flatMap((c) => c.args)

@@ -3,7 +3,7 @@ import { OrgSummary, buildBaseSummary, summarizeOrg } from '/Users/rubenhalman/P
 
 export interface cliflags {
   [key: string]: string | boolean | undefined;
-  components?: string;
+  metadata?: string;
   nohealthcheck?: boolean;
   keepdata?: boolean;
   nolimits?: boolean;
@@ -11,6 +11,7 @@ export interface cliflags {
   notests?: boolean;
   nocodelines?: boolean;
   targetusername?: string;
+  outputdirectory?: string;
 }
 
 export interface FlagObject {
@@ -20,7 +21,7 @@ export interface FlagObject {
 
 export async function summarize(passedFlags: cliflags): Promise<OrgSummary> {
   let baseSummary: OrgSummary = await buildBaseSummary(passedFlags.targetusername);
-
+  const keepData = passedFlags.keepdata ?? false;
   // boolean flag logic
   for (const flag of ['nohealthcheck', 'nolimits', 'notests', 'nocodeanalysis']) {
     const flagObject: FlagObject = { targetusername: passedFlags.targetusername };
@@ -42,7 +43,7 @@ export async function summarize(passedFlags: cliflags): Promise<OrgSummary> {
           flagObject['codeanalysis'] = true;
           break;
       }
-      flagObject['keepdata'] = passedFlags.keepdata;
+      flagObject['keepdata'] = keepData;
       if (typeof passedFlags.outputdirectory === 'string') {
         flagObject['outputdirectory'] = passedFlags.outputdirectory;
       }
@@ -50,9 +51,23 @@ export async function summarize(passedFlags: cliflags): Promise<OrgSummary> {
       console.debug(flagObject);
       // eslint-disable-next-line no-await-in-loop
       const orgSummary: OrgSummary = await summarizeOrg(flagObject, baseSummary);
-      console.debug(orgSummary);
       baseSummary = { ...baseSummary, ...orgSummary };
     }
+  }
+
+  // Check if metadata is either undefined or a non-empty string
+  if (passedFlags.metadata ?? typeof passedFlags.metadata === 'undefined') {
+    const commonFlagProperties: FlagObject = {
+      targetusername: passedFlags.targetusername,
+      keepdata: keepData,
+    };
+    commonFlagProperties['metadata'] = passedFlags.metadata;
+    if (typeof passedFlags.outputdirectory === 'string') {
+      commonFlagProperties['outputdirectory'] = passedFlags.outputdirectory;
+    }
+    // Call summarizeOrg and update baseSummary
+    const orgSummary: OrgSummary = await summarizeOrg(commonFlagProperties, baseSummary);
+    baseSummary = { ...baseSummary, ...orgSummary };
   }
 
   baseSummary.ResultState = 'Completed';
@@ -60,6 +75,5 @@ export async function summarize(passedFlags: cliflags): Promise<OrgSummary> {
     ...baseSummary,
   };
   console.log('Final Summary:', summary);
-  // finish(orgSummaryDirectory, summary, keepData);
   return summary;
 }

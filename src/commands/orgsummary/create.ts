@@ -1,13 +1,14 @@
 /* eslint-disable @typescript-eslint/member-ordering */
 import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
-import { OrgSummary } from 'sf-org-summary-core';
+// import { OrgSummary } from 'sf-org-summary-core';
+import { OrgSummary } from '/Users/rubenhalman/Projects/sf-org-summary-core/dist';
 import { summarize } from '../../module/summarizer';
 
 Messages.importMessagesDirectory(__dirname);
-const messages = Messages.loadMessages('sf-org-summary', 'summarize');
+const messages = Messages.loadMessages('sf-org-summary', 'orgsummary.create');
 
-export default class Summarize extends SfCommand<OrgSummary> {
+export default class OrgsummaryCreate extends SfCommand<OrgSummary> {
   public static readonly summary = messages.getMessage('summary');
   public static readonly description = messages.getMessage('description');
   public static readonly examples = messages.getMessages('examples');
@@ -16,10 +17,10 @@ export default class Summarize extends SfCommand<OrgSummary> {
   protected static supportsUsername = true;
 
   public static readonly flags = {
-    components: Flags.string({
-      summary: messages.getMessage('flags.components.summary'),
-      description: messages.getMessage('flags.components.description'),
-      char: 'c',
+    metadata: Flags.string({
+      summary: messages.getMessage('flags.metadata.summary'),
+      description: messages.getMessage('flags.metadata.description'),
+      char: 'm',
       required: false,
     }),
     nohealthcheck: Flags.boolean({
@@ -58,10 +59,16 @@ export default class Summarize extends SfCommand<OrgSummary> {
       char: 'u',
       required: false,
     }),
+    outputdirectory: Flags.string({
+      summary: messages.getMessage('flags.outputdirectory.summary'),
+      description: messages.getMessage('flags.outputdirectory.description'),
+      char: 'd',
+      required: false,
+    }),
   };
 
   public async run(): Promise<OrgSummary> {
-    const { flags } = await this.parse(Summarize);
+    const { flags } = await this.parse(OrgsummaryCreate);
     return summarize(flags);
   }
 }

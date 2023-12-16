@@ -51,6 +51,9 @@
     "topics": {
       "hello": {
         "description": "Commands to say hello."
+      },
+      "orgsummary": {
+        "description": "description for orgsummary"
       }
     }
   },
