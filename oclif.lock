@@ -3600,6 +3600,10 @@ husky@^7.0.4:
   version "7.0.4"
   resolved "https://registry.npmjs.org/husky/-/husky-7.0.4.tgz"
 
+husky@^8.0.3:
+  version "8.0.3"
+  resolved "https://registry.npmjs.org/husky/-/husky-8.0.3.tgz"
+
 hyperlinker@^1.0.0:
   version "1.0.0"
   resolved "https://registry.npmjs.org/hyperlinker/-/hyperlinker-1.0.0.tgz"
@@ -6113,9 +6117,9 @@ setimmediate@^1.0.5:
   version "1.0.5"
   resolved "https://registry.npmjs.org/setimmediate/-/setimmediate-1.0.5.tgz"
 
-sf-org-summary-core@^1.1.0:
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/sf-org-summary-core/-/sf-org-summary-core-1.1.0.tgz#00a233a559e325125059177d3c426aa32932b7dd"
+sf-org-summary-core@^1.2.0:
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/sf-org-summary-core/-/sf-org-summary-core-1.2.0.tgz#d87c02b6651e721c9c6c38100e19be499c637763"
   dependencies:
     axios "^1.6.2"
     jsforce "^1.11.1"

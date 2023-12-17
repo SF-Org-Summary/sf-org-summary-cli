@@ -1,7 +1,7 @@
 import { execCmd, TestSession } from '@salesforce/cli-plugins-testkit';
 import { expect } from 'chai';
 
-describe('summarize NUTs', () => {
+describe('orgsummary upload NUTs', () => {
   let session: TestSession;
 
   before(async () => {
@@ -14,7 +14,7 @@ describe('summarize NUTs', () => {
 
   it('should display provided name', () => {
     const name = 'World';
-    const command = `summarize --name ${name}`;
+    const command = `orgsummary upload --name ${name}`;
     const output = execCmd(command, { ensureExitCode: 0 }).shellOutput.stdout;
     expect(output).to.contain(name);
   });

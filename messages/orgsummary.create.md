@@ -22,13 +22,13 @@ Skip Apex Tests
 
 Skips the execution of Apex tests during the summary process.
 
-# flags.components.summary
+# flags.metadata.summary
 
-Set Components To Query
+Set Metadata To Query
 
-# flags.components.description
+# flags.metadata.description
 
-Specifies the data points (components) to include in the summary. Use commas to separate multiple components.
+Specifies the Metadata data points to include in the summary. Use commas to separate multiple components.
 
 # flags.keepdata.summary
 
@@ -76,6 +76,14 @@ Keep Data Files
 # flags.noscan.summary
 
 Keep Data Files
+
+# flags.outputdirectory.description
+
+Set a path to store the org summary result.
+
+# flags.outputdirectory.summary
+
+Store Summary
 
 # examples
 
