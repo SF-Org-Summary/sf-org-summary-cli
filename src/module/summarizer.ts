@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import { OrgSummary, buildBaseSummary, summarizeOrg } from '/Users/rubenhalman/Projects/sf-org-summary-core/dist';
+import { OrgSummary, buildBaseSummary, summarizeOrg } from 'sf-org-summary-core';
 
 export interface cliflags {
   [key: string]: string | boolean | undefined;

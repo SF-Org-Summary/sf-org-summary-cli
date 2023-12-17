@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/member-ordering */
 import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
-// import { OrgSummary } from 'sf-org-summary-core';
-import { OrgSummary } from '/Users/rubenhalman/Projects/sf-org-summary-core/dist';
+import { OrgSummary } from 'sf-org-summary-core';
 import { summarize } from '../../module/summarizer';
 
 Messages.importMessagesDirectory(__dirname);

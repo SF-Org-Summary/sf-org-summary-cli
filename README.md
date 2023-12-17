@@ -1,12 +1,12 @@
 # SF Org Summary
 
-SF Org Summary is a powerful Salesforce CLI plugin designed to provide a comprehensive overview of your Salesforce Org instance(s). This tool offers valuable insights into key metadata, test results, code metrics, usage of limit-related resources, linter results, and more, empowering you to better understand and monitor your Salesforce environment.
+SF Org Summary is a robust Salesforce CLI plugin designed to offer a comprehensive overview of your Salesforce Org instance(s). This tool provides valuable insights into key metadata, test results, code metrics, usage of limit-related resources, linter results, and more, enabling you to better understand and monitor your Salesforce environment.
 
 ## Features
 
 ### Component Summary
 
-Utilize the Tooling API to aggregate and track metadata details. Get a quick overview of component totals, including the last modified date.
+Utilize the Tooling API to aggregate and track metadata details. Gain a quick overview of component totals, including the last modified date.
 
 ### Tests Summary
 
@@ -22,25 +22,27 @@ Identify and analyze potential risks in your codebase for Apex and JavaScript. R
 
 ### Health Check Score
 
-Assess the health of your Salesforce instance with a comprehensive health check score. Understand the amount of open risks versus compliance and receive detailed information about security-related settings.
+Assess the health of your Salesforce instance with a comprehensive health check score. Understand the number of open risks versus compliance and receive detailed information about security-related settings.
 
 ## Installation
 
-Install the SF Org Summary plugin seamlessly into your Salesforce CLI environment:
+Install the SF Org Summary plugin into your Salesforce CLI environment:
 
 ```bash
-sfdx plugins:install sf-org-summary
+sf plugins:install sf-org-summary
 ```
 
 ## Usage
 
+### Orgsummary Create
+
 ```bash
-sfdx summarize:org [flags]
+sf orgsummary create [flags]
 ```
 
-### Options
+#### Options
 
-    -c, --components <datapoint1,datapoint2>: Specify the data points to include in the summary.
+    -m, --metadata <datapoint1,datapoint2>: Specify the data points to include in the summary.
     -g, --nohealthcheck: Skip fetching and displaying Salesforce Health Check Score and Risks.
     -k, --keepdata: Keep the intermediate data files generated during the summary process.
     -l, --nolimits: Skip fetching and displaying Salesforce Org limits.
@@ -48,13 +50,31 @@ sfdx summarize:org [flags]
     -t, --notests: Skip running Apex tests during the summary.
     -u, --targetusername <username>: Specify the target Salesforce Org username.
 
-### Examples
+#### Examples
 
 Get a summary for a Salesforce org:
 ```bash
-sfdx summarize:org -u my-org-username
+sf orgsummary create  -u my-org-username
 ```
 Get a summary of specific components while skipping apex tests:
 ```bash
-sfdx summarize:org -u my-org-username --notests -c ApexClass,ApexTrigger,LightningComponentBundle
+sf orgsummary create  -u my-org-username --notests -c ApexClass,ApexTrigger,LightningComponentBundle
+```
+
+### Orgsummary Upload
+
+```bash
+sf orgsummary upload [flags]
+```
+
+#### Options
+
+    -f, --summaryfile <summary-file-path>: Specify the path to the summary file.
+    -u, --targetusername <target-org-username>: Specify the username of the target Salesforce Org.
+
+#### Example
+
+Upload an org summary to a Salesforce org:
+```bash
+sf orgsummary upload -f path/to/summary-file.json -u my-target-org-username
 ```

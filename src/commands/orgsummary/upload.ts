@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/member-ordering */
 import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
-import { uploadSummary, UploadSummaryResult } from '/Users/rubenhalman/Projects/sf-org-summary-core/dist';
-// import { OrgSummary, uploadSummary } from 'sf-org-summary-core';
+import { uploadSummary, UploadSummaryResult } from 'sf-org-summary-core';
 
 Messages.importMessagesDirectory(__dirname);
 const messages = Messages.loadMessages('sf-org-summary', 'orgsummary.upload');
